@@ -25,7 +25,7 @@ const handleLogin = async () => {
 
 <template>
   <div class="bg-white p-6 rounded shadow-md w-full max-w-md mx-auto">
-    <h2 class="text-xl font-semibold mb-4">Login TESTE 2 COMMIT</h2>
+    <h2 class="text-xl font-semibold mb-4">Login MINITESTE</h2>
 
     <div v-if="error" class="mb-4 text-red-600 text-sm">{{ error }}</div>
 
