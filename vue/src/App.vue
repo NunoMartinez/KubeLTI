@@ -1,5 +1,6 @@
 <script setup>
 import { RouterLink, RouterView } from 'vue-router'
+
 </script>
 
 <template>
@@ -23,8 +24,11 @@ import { RouterLink, RouterView } from 'vue-router'
       </nav>
     </header>
 
-    <main class="max-w-3xl mx-auto p-6">
-      <RouterView />
-    </main>
+   <main class="flex min-h-screen bg-gray-50">
+  <Sidebar />
+  <div class="flex-1 overflow-auto ">
+    <RouterView />
+  </div>
+</main>
   </div>
 </template>

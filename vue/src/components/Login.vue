@@ -1,27 +1,30 @@
 <script setup>
 import { ref } from 'vue'
-import axios from 'axios'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const email = ref('')
 const password = ref('')
 const error = ref(null)
 
+const auth = useAuthStore()
+const router = useRouter()
+
 const handleLogin = async () => {
-  try {
-    const response = await axios.post('/auth/login', {
-      email: email.value,
-      password: password.value
-    })
+  const success = await auth.login({
+    email: email.value,
+    password: password.value
+  })
 
-    console.log('Login successful:', response.data)
+  if (success) {
     error.value = null
-
-    // You can also store token or redirect here
-  } catch (err) {
-    error.value = err.response?.data?.message || 'Login failed'
+    await router.push('/dashboard') // ✅ redirect
+  } else {
+    error.value = 'Invalid email or password'
   }
 }
 </script>
+
 
 <template>
   <div class="bg-white p-6 rounded shadow-md w-full max-w-md mx-auto">
