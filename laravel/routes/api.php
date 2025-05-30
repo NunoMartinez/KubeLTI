@@ -25,6 +25,8 @@ Route::get('/kube/nodes', [KubeController::class, 'nodes']);
 Route::get('/kube/pods', [KubeController::class, 'pods']);
 Route::post('kube/pods', [KubeController::class, 'createPod']);
 Route::delete('kube/pods/{namespace}/{name}', [KubeController::class, 'deletePod']);
+Route::get('/kube/pods/{namespace}/{name}', [KubeController::class, 'getPod']);
+Route::put('/kube/pods/{namespace}/{name}', [KubeController::class, 'updatePod']);
 
 //SERVICES
 Route::get('/kube/services', [KubeController::class, 'services']);

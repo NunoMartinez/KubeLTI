@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import EditPodModal from '@/components/EditPodModal.vue'
 
 const pods = ref([])
 const namespaces = ref([])
@@ -8,6 +9,19 @@ const namespaces = ref([])
 const loadingPods = ref(false)
 const loadingCreate = ref(false)
 const loadingDelete = ref(null) // store name of deleting pod
+const showEditModal = ref(false)
+const currentPod = ref(null)
+
+
+function editPod(pod) {
+  currentPod.value = pod
+  showEditModal.value = true
+}
+
+function onPodUpdated() {
+  fetchPods()
+}
+
 
 const notification = ref({ message: '', type: '' }) // {type: 'success'|'error'}
 
@@ -184,16 +198,17 @@ onMounted(() => {
             >{{ pod.status }}</td>
             <td class="px-6 py-4 text-sm text-gray-600">{{ pod.nodeName }}</td>
             <td class="px-6 py-4 text-sm text-gray-600">{{ pod.restarts }}</td>
-            <td class="px-6 py-4 text-right">
-              <button
-                @click="deletePod(pod.namespace, pod.name)"
-                :disabled="loadingDelete === pod.name"
-                class="text-red-600 hover:underline text-sm flex items-center disabled:opacity-50"
-              >
-                <span v-if="loadingDelete === pod.name" class="loader mr-1"></span>
-                Delete
-              </button>
-            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+    <button @click="editPod(pod)"
+            class="text-blue-600 hover:text-blue-900">
+      Edit
+    </button>
+    <button @click="deletePod(pod.namespace, pod.name)"
+            class="text-red-600 hover:text-red-900">
+      Delete
+    </button>
+  </td>
+
           </tr>
           <tr v-if="!loadingPods && pods.length === 0">
             <td colspan="6" class="px-6 py-4 text-center text-gray-500">No pods found.</td>
@@ -209,6 +224,13 @@ onMounted(() => {
       </div>
     </div>
   </div>
+   <EditPodModal 
+    v-if="currentPod"
+    :pod="currentPod"
+    :show="showEditModal"
+    @close="showEditModal = false"
+    @updated="onPodUpdated"
+  />
 </template>
 
 <style scoped>

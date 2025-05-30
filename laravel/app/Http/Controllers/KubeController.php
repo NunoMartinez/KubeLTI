@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Symfony\Component\Yaml\Yaml;
 
 class KubeController extends Controller
 {
@@ -251,6 +252,111 @@ public function deletePod(string $namespace, string $name)
     }
 }
 
+public function getPod($namespace, $name)
+{
+    try {
+        $response = $this->kubeRequest(
+            "/api/v1/namespaces/{$namespace}/pods/{$name}"
+        );
+        return response()->json($response->json());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Failed to get pod',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+public function updatePod(Request $request, $namespace, $name)
+{
+    $request->validate([
+        'yaml' => 'required_without:json|string',
+        'json' => 'required_without:yaml|array'
+    ]);
+
+    try {
+        if ($request->has('json')) {
+            $body = $request->json;
+        } else {
+            $yamlContent = trim($request->yaml);
+            if (empty($yamlContent)) {
+                throw new \Exception("YAML input cannot be empty");
+            }
+
+            $body = $this->parseYamlWithTimestamps($yamlContent);
+        }
+
+        // Convert all timestamps to strings
+        $body = $this->normalizePodTimestamps($body);
+      
+        $body = $this->normalizePodResources($body);
+        // Remove immutable/status fields
+        unset($body['status']);
+        unset($body['metadata']['managedFields']);
+        unset($body['metadata']['uid']);
+        unset($body['metadata']['resourceVersion']);
+
+        // Validate structure
+        if (!isset($body['apiVersion'], $body['kind'], $body['metadata'], $body['spec'])) {
+            throw new \Exception("Missing required Kubernetes fields");
+        }
+
+        $response = $this->kubeRequest(
+            "/api/v1/namespaces/{$namespace}/pods/{$name}",
+            'PUT',
+            [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json'
+                ],
+                'body' => json_encode($body, JSON_UNESCAPED_SLASHES)
+            ]
+        );
+
+        return response()->json($response->json(), $response->status());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Update failed',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+private function normalizePodTimestamps($data)
+{
+    $timestampFields = [
+        'creationTimestamp',
+        'lastProbeTime',
+        'lastTransitionTime',
+        'finishedAt',
+        'startedAt',
+        'startTime'
+    ];
+
+    array_walk_recursive($data, function (&$value, $key) use ($timestampFields) {
+        if (in_array($key, $timestampFields)) {
+            if (is_numeric($value)) {
+                $value = date('Y-m-d\TH:i:s\Z', $value);
+            } elseif ($value instanceof \DateTime) {
+                $value = $value->format('Y-m-d\TH:i:s\Z');
+            }
+        }
+    });
+
+    return $data;
+}
+
+private function normalizePodResources($data)
+{
+    if (isset($data['spec']['containers'])) {
+        foreach ($data['spec']['containers'] as &$container) {
+            if (isset($container['resources']) && is_array($container['resources']) && empty($container['resources'])) {
+                $container['resources'] = new \stdClass(); // Converts to {} in JSON
+            }
+        }
+    }
+    return $data;
+}
  
 
 
@@ -637,18 +743,37 @@ public function getIngress($namespace, $name)
 public function updateIngress(Request $request, $namespace, $name)
 {
     $request->validate([
-        'yaml' => 'required|string',
-        'json' => 'required|array' // For validation fallback
+        'yaml' => 'required_without:json|string',
+        'json' => 'required_without:yaml|array'
     ]);
 
     try {
-        // Try parsing YAML first
-        $body = $request->json->all();
-        
+        if ($request->has('json')) {
+            $body = $request->json;
+        } else {
+            $yamlContent = trim($request->yaml);
+            if (empty($yamlContent)) {
+                throw new \Exception("YAML input cannot be empty");
+            }
+
+            // Parse YAML with timestamp handling
+            $body = $this->parseYamlWithTimestamps($yamlContent);
+        }
+
+        // Convert timestamps to strings
+        $body = $this->normalizeTimestamps($body);
+
+        // Validate structure
+        if (!isset($body['apiVersion'], $body['kind'], $body['metadata'], $body['spec'])) {
+            throw new \Exception("Missing required Kubernetes fields");
+        }
+
         // Ensure we're updating the correct resource
-        if (($body['metadata']['name'] ?? null) !== $name || 
-            ($body['metadata']['namespace'] ?? null) !== $namespace) {
-            throw new \Exception("Cannot change resource name or namespace");
+        if (($body['metadata']['name'] ?? null) !== $name) {
+            throw new \Exception("Cannot change resource name");
+        }
+        if (($body['metadata']['namespace'] ?? null) !== $namespace) {
+            throw new \Exception("Cannot change resource namespace");
         }
 
         $response = $this->kubeRequest(
@@ -659,16 +784,55 @@ public function updateIngress(Request $request, $namespace, $name)
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json'
                 ],
-                'body' => json_encode($body)
+                'body' => json_encode($body, JSON_UNESCAPED_SLASHES)
             ]
         );
 
         return response()->json($response->json(), $response->status());
     } catch (\Exception $e) {
         return response()->json([
-            'error' => 'Failed to update ingress',
-            'message' => $e->getMessage()
+            'error' => 'Update failed',
+            'message' => $e->getMessage(),
+            'details' => $e instanceof \Symfony\Component\Yaml\Exception\ParseException 
+                ? $e->getParsedLine() 
+                : null
         ], 500);
     }
+}
+
+private function parseYamlWithTimestamps($yamlContent)
+{
+    $body = \Symfony\Component\Yaml\Yaml::parse($yamlContent);
+    
+    // Convert DateTime objects to strings
+    array_walk_recursive($body, function (&$value) {
+        if ($value instanceof \DateTime) {
+            $value = $value->format('Y-m-d\TH:i:s\Z');
+        }
+    });
+    
+    return $body;
+}
+
+private function normalizeTimestamps($data)
+{
+    $timestampFields = [
+        'creationTimestamp',
+        'time',
+        'lastTransitionTime',
+        'lastUpdateTime'
+    ];
+
+    array_walk_recursive($data, function (&$value, $key) use ($timestampFields) {
+        if (in_array($key, $timestampFields) && !is_string($value)) {
+            if (is_numeric($value)) {
+                $value = date('Y-m-d\TH:i:s\Z', $value);
+            } elseif ($value instanceof \DateTime) {
+                $value = $value->format('Y-m-d\TH:i:s\Z');
+            }
+        }
+    });
+
+    return $data;
 }
 }

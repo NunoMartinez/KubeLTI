@@ -4,7 +4,7 @@ import * as yaml from 'yaml'
 import axios from 'axios'
 
 const props = defineProps({
-  ingress: Object,
+  pod: Object,
   show: Boolean
 })
 
@@ -15,27 +15,25 @@ const rawYaml = ref('')
 const rawJson = ref('')
 const error = ref(null)
 const loading = ref(false)
-const fullIngress = ref(null)
+const fullPod = ref(null)
 
-// Fetch complete ingress data when modal opens
 watch(() => props.show, async (show) => {
   if (show) {
     error.value = null
     try {
       loading.value = true
-      const response = await axios.get(`/kube/ingresses/${props.ingress.namespace}/${props.ingress.name}`)
-      fullIngress.value = response.data
+      const response = await axios.get(`/kube/pods/${props.pod.namespace}/${props.pod.name}`)
+      fullPod.value = response.data
       
-      // Convert to proper editing formats
-      rawYaml.value = yaml.stringify(fullIngress.value, {
+      // Convert to editing formats
+      rawYaml.value = yaml.stringify(fullPod.value, {
         sortMapEntries: true,
-        indent: 2,
-        keepBlobsInJSON: true
+        indent: 2
       })
       
-      rawJson.value = JSON.stringify(fullIngress.value, null, 2)
+      rawJson.value = JSON.stringify(fullPod.value, null, 2)
     } catch (e) {
-      error.value = 'Failed to load ingress: ' + e.message
+      error.value = 'Failed to load pod: ' + e.message
       console.error(e)
     } finally {
       loading.value = false
@@ -43,15 +41,16 @@ watch(() => props.show, async (show) => {
   }
 })
 
-function validateYaml(yamlContent) {
-  try {
-    const parsed = yaml.parse(yamlContent);
-    if (!parsed?.apiVersion || !parsed?.kind || !parsed?.metadata || !parsed?.spec) {
-      throw new Error('Missing required Kubernetes fields');
+function validatePodStructure(data) {
+  const requiredFields = ['apiVersion', 'kind', 'metadata', 'spec']
+  requiredFields.forEach(field => {
+    if (!data[field]) {
+      throw new Error(`Missing required field: ${field}`)
     }
-    return true;
-  } catch (e) {
-    throw new Error(`Invalid YAML: ${e.message}`);
+  })
+  
+  if (!data.spec.containers || data.spec.containers.length === 0) {
+    throw new Error('Pod must have at least one container')
   }
 }
 
@@ -60,17 +59,24 @@ async function saveChanges() {
     loading.value = true;
     error.value = null;
 
-    // Remove status field before sending
-    const preparePayload = (content) => {
-      if (content.includes('status:')) {
-        return content.replace(/status:.*?(?=\n\w|$)/s, '').trim();
-      }
-      return content;
-    };
+    // Clean the YAML/JSON before sending
+  const cleanPodSpec = (content) => {
+  // Convert empty resources arrays to objects
+  content = content.replace(/resources: \[\]/g, 'resources: {}');
+  
+  // Remove status and managedFields
+  if (content.includes('status:')) {
+    content = content.replace(/status:.*?(?=\n\w|$)/s, '').trim();
+  }
+  if (content.includes('managedFields:')) {
+    content = content.replace(/managedFields:.*?(?=\n\w|$)/s, '').trim();
+  }
+  return content;
+};
 
     let requestData = {};
     if (editingMode.value === 'yaml') {
-      const cleanedYaml = preparePayload(rawYaml.value);
+      const cleanedYaml = cleanPodSpec(rawYaml.value);
       if (!cleanedYaml.trim()) {
         throw new Error('YAML content cannot be empty');
       }
@@ -79,6 +85,9 @@ async function saveChanges() {
       try {
         const json = JSON.parse(rawJson.value);
         delete json.status;
+        delete json.metadata?.managedFields;
+        delete json.metadata?.uid;
+        delete json.metadata?.resourceVersion;
         requestData = { json };
       } catch (e) {
         throw new Error('Invalid JSON: ' + e.message);
@@ -86,12 +95,11 @@ async function saveChanges() {
     }
 
     const response = await axios.put(
-      `/kube/ingresses/${props.ingress.namespace}/${props.ingress.name}`,
+      `/kube/pods/${props.pod.namespace}/${props.pod.name}`,
       requestData,
       {
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Content-Type': 'application/json'
         }
       }
     );
@@ -99,9 +107,9 @@ async function saveChanges() {
     emit('updated');
     emit('close');
   } catch (err) {
-    error.value = err.response?.data?.message || 
+    error.value = err.response?.data?.error || 
                  err.message || 
-                 'Failed to update ingress';
+                 'Failed to update pod';
     console.error('Update error:', {
       error: err.response?.data,
       request: err.config?.data
@@ -110,11 +118,11 @@ async function saveChanges() {
     loading.value = false;
   }
 }
-
-
 </script>
 
 <template>
+  <!-- Reuse the same modal template structure as EditIngressModal -->
+  <!-- Just change the title and any pod-specific instructions -->
   <Transition name="modal">
     <div v-if="show" class="fixed inset-0 z-50 overflow-y-auto">
       <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center">
@@ -125,9 +133,10 @@ async function saveChanges() {
         <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
           <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-              Edit Ingress: {{ ingress.name }} ({{ ingress.namespace }})
+              Edit Pod: {{ pod.name }} ({{ pod.namespace }})
             </h3>
             
+            <!-- Mode selector -->
             <div class="flex mb-4 border-b">
               <button 
                 @click="editingMode = 'yaml'"
@@ -149,32 +158,31 @@ async function saveChanges() {
               {{ error }}
             </div>
 
-            <!-- Loading state -->
-            <div v-if="loading && !fullIngress" class="flex justify-center py-8">
+            <div v-if="loading && !fullPod" class="flex justify-center py-8">
               <span class="loader"></span>
             </div>
 
             <!-- YAML Editor -->
-            <div v-show="editingMode === 'yaml' && fullIngress">
+            <div v-show="editingMode === 'yaml' && fullPod">
               <textarea
                 v-model="rawYaml"
                 class="w-full h-96 font-mono text-sm border rounded p-2"
                 spellcheck="false"
               ></textarea>
               <p class="mt-1 text-xs text-gray-500">
-                Edit the full Ingress specification in YAML format
+                Edit the full Pod specification in YAML format
               </p>
             </div>
 
             <!-- JSON Editor -->
-            <div v-show="editingMode === 'json' && fullIngress">
+            <div v-show="editingMode === 'json' && fullPod">
               <textarea
                 v-model="rawJson"
                 class="w-full h-96 font-mono text-sm border rounded p-2"
                 spellcheck="false"
               ></textarea>
               <p class="mt-1 text-xs text-gray-500">
-                Edit the full Ingress specification in JSON format
+                Edit the full Pod specification in JSON format
               </p>
             </div>
           </div>
@@ -182,7 +190,7 @@ async function saveChanges() {
           <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
             <button
               @click="saveChanges"
-              :disabled="loading || !fullIngress"
+              :disabled="loading || !fullPod"
               class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
             >
               <span v-if="loading" class="loader mr-2"></span>
