@@ -284,6 +284,82 @@ public function deletePod(string $namespace, string $name)
         }
     }
 
+public function createService(Request $request)
+{
+    $request->validate([
+        'namespace' => 'required|string',
+        'name' => 'required|string',
+        'type' => 'required|in:ClusterIP,NodePort,LoadBalancer',
+        'port' => 'required|integer|min:1|max:65535',
+        'targetPort' => 'required|integer|min:1|max:65535',
+        'selector' => 'required|array'
+    ]);
+
+    $body = [
+        'apiVersion' => 'v1',
+        'kind' => 'Service',
+        'metadata' => [
+            'name' => $request->name,
+            'namespace' => $request->namespace
+        ],
+        'spec' => [
+            'type' => $request->type,
+            'ports' => [[
+                'port' => (int)$request->port,
+                'targetPort' => (int)$request->targetPort
+            ]],
+            'selector' => $request->selector
+        ]
+    ];
+
+    try {
+        $response = $this->kubeRequest(
+            "/api/v1/namespaces/{$request->namespace}/services",
+            'POST',
+            [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json'
+                ],
+                'body' => json_encode($body)
+            ]
+        );
+
+        return response()->json($response->json(), $response->status());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Failed to create service',
+            'message' => $e->getMessage(),
+            'request_body' => $body // For debugging
+        ], 500);
+    }
+}
+
+public function deleteService($namespace, $name)
+{
+    try {
+        $response = $this->kubeRequest(
+            "/api/v1/namespaces/{$namespace}/services/{$name}",
+            'DELETE'
+        );
+
+        return response()->json(['message' => 'Service deleted'], $response->status());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Failed to delete service',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+
+
+
+
+
+
+            //  NAMESPACES  \\
+
     public function namespaces()
     {
         try {
@@ -338,6 +414,11 @@ public function deletePod(string $namespace, string $name)
             return response()->json(['error' => 'Failed to delete namespace', 'message' => $e->getMessage()], 500);
         }
     }
+
+
+
+            //  DEPLOYMENTS  \\
+
 
     public function deployments()
     {
@@ -423,6 +504,11 @@ public function deletePod(string $namespace, string $name)
         }
     }
 
+
+
+            //  INGRESS  \\
+
+
     public function ingresses()
     {
         try {
@@ -450,4 +536,139 @@ public function deletePod(string $namespace, string $name)
             return response()->json(['error' => 'Failed to retrieve ingresses', 'message' => $e->getMessage()], 500);
         }
     }
+
+    public function createIngress(Request $request)
+{
+    $request->validate([
+        'namespace' => 'required|string',
+        'name' => 'required|string',
+        'host' => 'required|string',
+        'serviceName' => 'required|string',
+        'servicePort' => 'required|integer',
+        'ingressClass' => 'nullable|string'
+    ]);
+
+    $body = [
+        'apiVersion' => 'networking.k8s.io/v1',
+        'kind' => 'Ingress',
+        'metadata' => [
+            'name' => $request->name,
+            'namespace' => $request->namespace,
+            'annotations' => $request->ingressClass ? [
+                'kubernetes.io/ingress.class' => $request->ingressClass
+            ] : []
+        ],
+        'spec' => [
+            'rules' => [[
+                'host' => $request->host,
+                'http' => [
+                    'paths' => [[
+                        'path' => '/',
+                        'pathType' => 'Prefix',
+                        'backend' => [
+                            'service' => [
+                                'name' => $request->serviceName,
+                                'port' => [
+                                    'number' => (int)$request->servicePort
+                                ]
+                            ]
+                        ]
+                    ]]
+                ]
+            ]]
+        ]
+    ];
+
+    try {
+        $response = $this->kubeRequest(
+            "/apis/networking.k8s.io/v1/namespaces/{$request->namespace}/ingresses",
+            'POST',
+            [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json'
+                ],
+                'body' => json_encode($body)
+            ]
+        );
+
+        return response()->json($response->json(), $response->status());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Failed to create ingress',
+            'message' => $e->getMessage(),
+            'request_body' => $body
+        ], 500);
+    }
+}
+
+public function deleteIngress($namespace, $name)
+{
+    try {
+        $response = $this->kubeRequest(
+            "/apis/networking.k8s.io/v1/namespaces/{$namespace}/ingresses/{$name}",
+            'DELETE'
+        );
+
+        return response()->json(['message' => 'Ingress deleted'], $response->status());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Failed to delete ingress',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+public function getIngress($namespace, $name)
+{
+    try {
+        $response = $this->kubeRequest(
+            "/apis/networking.k8s.io/v1/namespaces/{$namespace}/ingresses/{$name}"
+        );
+        return response()->json($response->json());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Failed to get ingress',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+public function updateIngress(Request $request, $namespace, $name)
+{
+    $request->validate([
+        'yaml' => 'required|string',
+        'json' => 'required|array' // For validation fallback
+    ]);
+
+    try {
+        // Try parsing YAML first
+        $body = $request->json->all();
+        
+        // Ensure we're updating the correct resource
+        if (($body['metadata']['name'] ?? null) !== $name || 
+            ($body['metadata']['namespace'] ?? null) !== $namespace) {
+            throw new \Exception("Cannot change resource name or namespace");
+        }
+
+        $response = $this->kubeRequest(
+            "/apis/networking.k8s.io/v1/namespaces/{$namespace}/ingresses/{$name}",
+            'PUT',
+            [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json'
+                ],
+                'body' => json_encode($body)
+            ]
+        );
+
+        return response()->json($response->json(), $response->status());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Failed to update ingress',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
 }

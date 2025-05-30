@@ -18,16 +18,18 @@ Route::get('/kube/api', [KubeController::class, "proxy"]);
 Route::get('/kube/metrics', [KubeController::class, 'clusterMetrics']);
 
 
-
+//NODES
 Route::get('/kube/nodes', [KubeController::class, 'nodes']);
+
 //PODS
 Route::get('/kube/pods', [KubeController::class, 'pods']);
 Route::post('kube/pods', [KubeController::class, 'createPod']);
 Route::delete('kube/pods/{namespace}/{name}', [KubeController::class, 'deletePod']);
 
-
-
+//SERVICES
 Route::get('/kube/services', [KubeController::class, 'services']);
+Route::post('/kube/services', [KubeController::class, 'createService']);
+Route::delete('/kube/services/{namespace}/{name}', [KubeController::class, 'deleteService']);
 
 //NAMESPACES
 Route::get('/kube/namespaces', [KubeController::class, 'namespaces']);
@@ -40,8 +42,12 @@ Route::get('/kube/deployments', [KubeController::class, 'deployments']);
 Route::post('/kube/deployments', [KubeController::class, 'createDeployment']);
 Route::delete('/kube/deployments/{namespace}/{name}', [KubeController::class, 'deleteDeployment']);
 
-
+//INGRESS
 Route::get('/kube/ingresses', [KubeController::class, 'ingresses']);
+Route::post('/kube/ingresses', [KubeController::class, 'createIngress']);
+Route::delete('/kube/ingresses/{namespace}/{name}', [KubeController::class, 'deleteIngress']);
+Route::get('/kube/ingresses/{namespace}/{name}', [KubeController::class, 'getIngress']);
+Route::put('/kube/ingresses/{namespace}/{name}', [KubeController::class, 'updateIngress']);
 
 
 
