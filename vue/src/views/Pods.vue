@@ -5,13 +5,47 @@ import EditPodModal from '@/components/EditPodModal.vue'
 
 const pods = ref([])
 const namespaces = ref([])
-
-const loadingPods = ref(false)
-const loadingCreate = ref(false)
-const loadingDelete = ref(null) // store name of deleting pod
+const loading = ref(false)
+const notification = ref({ message: '', type: '' })
 const showEditModal = ref(false)
 const currentPod = ref(null)
 
+const form = ref({
+  namespace: 'default',
+  name: '',
+  containerName: '',
+  image: '',
+  port: ''
+})
+
+// Fetch initial data
+onMounted(async () => {
+  await Promise.all([
+    fetchPods(),
+    fetchNamespaces()
+  ])
+})
+
+async function fetchPods() {
+  loading.value = true
+  try {
+    const res = await axios.get('/kube/pods')
+    pods.value = res.data
+  } catch (e) {
+    showNotification('Failed to fetch pods', 'error')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function fetchNamespaces() {
+  try {
+    const res = await axios.get('/kube/namespaces')
+    namespaces.value = res.data
+  } catch (e) {
+    showNotification('Failed to fetch namespaces', 'error')
+  }
+}
 
 function editPod(pod) {
   currentPod.value = pod
@@ -19,156 +53,110 @@ function editPod(pod) {
 }
 
 function onPodUpdated() {
+  showNotification('Pod updated successfully')
   fetchPods()
 }
 
-
-const notification = ref({ message: '', type: '' }) // {type: 'success'|'error'}
-
-const form = ref({
-  namespace: '',
-  name: '',
-  image: '',
-})
-
-const fetchPods = async () => {
-  loadingPods.value = true
-  try {
-    const res = await axios.get('/kube/pods')
-    pods.value = res.data
-  } catch (e) {
-    showNotification('Failed to fetch pods', 'error')
-    console.error(e)
-  } finally {
-    loadingPods.value = false
-  }
-}
-
-const fetchNamespaces = async () => {
-  try {
-    const res = await axios.get('/kube/namespaces')
-    namespaces.value = res.data
-    if (namespaces.value.length && !form.value.namespace) {
-      form.value.namespace = namespaces.value[0].name
-    }
-  } catch (e) {
-    showNotification('Failed to fetch namespaces', 'error')
-    console.error(e)
-  }
-}
-
-const showNotification = (msg, type = 'success') => {
+function showNotification(msg, type = 'success') {
   notification.value = { message: msg, type }
-  setTimeout(() => (notification.value = { message: '', type: '' }), 4000)
+  setTimeout(() => notification.value.message = '', 3000)
 }
 
-const createPod = async () => {
-  if (!form.value.namespace || !form.value.name || !form.value.image) {
-    showNotification('Please fill all fields', 'error')
-    return
-  }
-
-  loadingCreate.value = true
+async function createPod() {
   try {
     await axios.post('/kube/pods', form.value)
-    showNotification(`Pod "${form.value.name}" created successfully!`, 'success')
+    showNotification('Pod created successfully!')
     await fetchPods()
-    form.value.name = ''
-    form.value.image = ''
+    resetForm()
   } catch (err) {
-    showNotification('Failed to create pod', 'error')
-    console.error(err)
-  } finally {
-    loadingCreate.value = false
+    showNotification(err.response?.data?.error || 'Creation failed', 'error')
   }
 }
 
-const deletePod = async (namespace, name) => {
-  if (!confirm(`Delete pod "${name}" in namespace "${namespace}"?`)) return
-
-  loadingDelete.value = name
+async function deletePod(namespace, name) {
+  if (!confirm(`Delete pod ${name} in ${namespace}?`)) return
+  
   try {
     await axios.delete(`/kube/pods/${namespace}/${name}`)
-    showNotification(`Pod "${name}" deleted successfully!`, 'success')
+    showNotification('Pod deleted')
     await fetchPods()
   } catch (err) {
-    showNotification('Failed to delete pod', 'error')
-    console.error(err)
-  } finally {
-    loadingDelete.value = null
+    showNotification('Deletion failed', 'error')
   }
 }
 
-onMounted(() => {
-  fetchNamespaces()
-  fetchPods()
-})
+function resetForm() {
+  form.value = {
+    namespace: 'default',
+    name: '',
+    containerName: '',
+    image: '',
+    port: ''
+  }
+}
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 p-8 max-w-6xl mx-auto space-y-8">
-    <h1 class="text-2xl font-bold mb-4">Pods</h1>
+  <div class="min-h-screen bg-gray-50 p-8 max-w-6xl mx-auto space-y-6">
+    <h1 class="text-2xl font-bold">Pods</h1>
 
-    <transition name="fade">
-      <div
-        v-if="notification.message"
-        :class="[
-          'p-4 rounded mb-6',
-          notification.type === 'success' ? 'bg-green-100 text-green-800' : '',
-          notification.type === 'error' ? 'bg-red-100 text-red-800' : '',
-        ]"
-      >
-        {{ notification.message }}
-      </div>
-    </transition>
+    <!-- Notification -->
+    <div v-if="notification.message" 
+         :class="`p-4 rounded mb-4 ${notification.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`">
+      {{ notification.message }}
+    </div>
 
+    <!-- Create Pod Form -->
     <div class="bg-white p-6 rounded shadow border border-gray-200">
-      <form @submit.prevent="createPod" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+      <h2 class="text-lg font-medium mb-4">Create New Pod</h2>
+      <form @submit.prevent="createPod" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        <!-- Namespace Select -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Namespace</label>
-          <select
-            v-model="form.namespace"
-            required
-            class="border rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option v-for="ns in namespaces" :key="ns.name" :value="ns.name">{{ ns.name }}</option>
+          <label class="block text-sm font-medium mb-1">Namespace</label>
+          <select v-model="form.namespace" class="w-full border rounded p-2">
+            <option v-for="ns in namespaces" :value="ns.name">{{ ns.name }}</option>
           </select>
         </div>
+
+        <!-- Pod Name -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Pod Name</label>
-          <input
-            v-model="form.name"
-            type="text"
-            required
-            placeholder="pod-name"
-            :disabled="loadingCreate"
-            class="border rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          />
+          <label class="block text-sm font-medium mb-1">Pod Name</label>
+          <input v-model="form.name" type="text" required 
+                 class="w-full border rounded p-2" placeholder="my-pod">
         </div>
+
+        <!-- Container Name -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Image</label>
-          <input
-            v-model="form.image"
-            type="text"
-            required
-            placeholder="nginx:latest"
-            :disabled="loadingCreate"
-            class="border rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          />
+          <label class="block text-sm font-medium mb-1">Container Name</label>
+          <input v-model="form.containerName" type="text" required 
+                 class="w-full border rounded p-2" placeholder="main-container">
         </div>
+
+        <!-- Image -->
         <div>
-          <button
-            type="submit"
-            :disabled="loadingCreate"
-            class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
-          >
-            <span v-if="loadingCreate" class="loader mr-2"></span>
+          <label class="block text-sm font-medium mb-1">Image</label>
+          <input v-model="form.image" type="text" required 
+                 class="w-full border rounded p-2" placeholder="nginx:latest">
+        </div>
+
+        <!-- Port -->
+        <div>
+          <label class="block text-sm font-medium mb-1">Port (optional)</label>
+          <input v-model.number="form.port" type="number" min="1" max="65535"
+                 class="w-full border rounded p-2">
+        </div>
+
+        <div class="md:col-span-2">
+          <button type="submit" 
+                  class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
             Create Pod
           </button>
         </div>
       </form>
     </div>
 
+    <!-- Pods Table -->
     <div class="bg-white rounded shadow border border-gray-200 overflow-auto relative">
       <table class="min-w-full divide-y divide-gray-200">
         <thead class="bg-gray-50">
@@ -177,54 +165,58 @@ onMounted(() => {
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Namespace</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Node</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Restarts</th>
-            <th class="px-6 py-3"></th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">IP</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Containers</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100">
-          <tr v-if="loadingPods">
-            <td colspan="6" class="px-6 py-4 text-center text-gray-500">Loading pods...</td>
-          </tr>
-          <tr v-for="pod in pods" :key="pod.name + pod.namespace">
-            <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ pod.name }}</td>
-            <td class="px-6 py-4 text-sm text-gray-600">{{ pod.namespace }}</td>
-            <td
-              class="px-6 py-4 text-sm"
-              :class="{
+        <tbody class="divide-y divide-gray-200">
+          <tr v-for="pod in pods" :key="`${pod.namespace}-${pod.name}`">
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+              {{ pod.name }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ pod.namespace }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <span :class="{
                 'text-green-600': pod.status === 'Running',
                 'text-yellow-600': pod.status === 'Pending',
-                'text-red-600': pod.status !== 'Running' && pod.status !== 'Pending'
-              }"
-            >{{ pod.status }}</td>
-            <td class="px-6 py-4 text-sm text-gray-600">{{ pod.nodeName }}</td>
-            <td class="px-6 py-4 text-sm text-gray-600">{{ pod.restarts }}</td>
+                'text-red-600': pod.status === 'Failed'
+              }">
+                {{ pod.status }}
+              </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ pod.node }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ pod.ip }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ pod.containers?.join(', ') || 'N/A' }}
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-    <button @click="editPod(pod)"
-            class="text-blue-600 hover:text-blue-900">
-      Edit
-    </button>
-    <button @click="deletePod(pod.namespace, pod.name)"
-            class="text-red-600 hover:text-red-900">
-      Delete
-    </button>
-  </td>
-
-          </tr>
-          <tr v-if="!loadingPods && pods.length === 0">
-            <td colspan="6" class="px-6 py-4 text-center text-gray-500">No pods found.</td>
+              <button @click="editPod(pod)"
+                      class="text-blue-600 hover:text-blue-900">
+                Edit
+              </button>
+              <button @click="deletePod(pod.namespace, pod.name)"
+                      class="text-red-600 hover:text-red-900">
+                Delete
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
-
-      <div
-        v-if="loadingPods"
-        class="absolute inset-0 bg-white bg-opacity-70 flex justify-center items-center"
-      >
+      
+      <div v-if="loading" class="absolute inset-0 bg-white bg-opacity-70 flex items-center justify-center">
         <span class="loader"></span>
       </div>
     </div>
   </div>
-   <EditPodModal 
+
+  <EditPodModal 
     v-if="currentPod"
     :pod="currentPod"
     :show="showEditModal"
@@ -232,26 +224,3 @@ onMounted(() => {
     @updated="onPodUpdated"
   />
 </template>
-
-<style scoped>
-.loader {
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #3b82f6; /* Tailwind blue-500 */
-  border-radius: 50%;
-  width: 16px;
-  height: 16px;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
-</style>

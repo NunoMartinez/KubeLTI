@@ -32,17 +32,23 @@ Route::put('/kube/pods/{namespace}/{name}', [KubeController::class, 'updatePod']
 Route::get('/kube/services', [KubeController::class, 'services']);
 Route::post('/kube/services', [KubeController::class, 'createService']);
 Route::delete('/kube/services/{namespace}/{name}', [KubeController::class, 'deleteService']);
+Route::get('/kube/services/{namespace}/{name}', [KubeController::class, 'getService']);
+Route::put('/kube/services/{namespace}/{name}', [KubeController::class, 'updateService']);
 
 //NAMESPACES
 Route::get('/kube/namespaces', [KubeController::class, 'namespaces']);
 Route::post('/kube/namespaces', [KubeController::class, 'createNamespace']);
 Route::delete('/kube/namespaces/{name}', [KubeController::class, 'deleteNamespace']);
+Route::get('/kube/namespaces/{name}', [KubeController::class, 'getNamespace']);
+Route::put('/kube/namespaces/{name}', [KubeController::class, 'updateNamespace']);
 
 
 //DEPLOYMENTS
 Route::get('/kube/deployments', [KubeController::class, 'deployments']);
 Route::post('/kube/deployments', [KubeController::class, 'createDeployment']);
 Route::delete('/kube/deployments/{namespace}/{name}', [KubeController::class, 'deleteDeployment']);
+Route::get('/kube/deployments/{namespace}/{name}', [KubeController::class, 'getDeployment']);
+Route::put('/kube/deployments/{namespace}/{name}', [KubeController::class, 'updateDeployment']);
 
 //INGRESS
 Route::get('/kube/ingresses', [KubeController::class, 'ingresses']);

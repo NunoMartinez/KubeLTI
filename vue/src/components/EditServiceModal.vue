@@ -4,7 +4,7 @@ import * as yaml from 'yaml'
 import axios from 'axios'
 
 const props = defineProps({
-  ingress: Object,
+  service: Object,
   show: Boolean
 })
 
@@ -15,50 +15,76 @@ const rawYaml = ref('')
 const rawJson = ref('')
 const error = ref(null)
 const loading = ref(false)
-const fullIngress = ref(null)
+const fullService = ref(null)
+const yamlError = ref(null);
 
-// Function to fetch ingress data
-async function fetchIngressData() {
-  if (!props.ingress) return;
+// Function to fetch service data
+async function fetchServiceData() {
+  if (!props.service) return;
   
   error.value = null
   try {
     loading.value = true
-    const response = await axios.get(`/kube/ingresses/${props.ingress.namespace}/${props.ingress.name}`)
-    fullIngress.value = response.data
+    const response = await axios.get(`/kube/services/${props.service.namespace}/${props.service.name}`)
+    fullService.value = response.data
     
     // Convert to proper editing formats
-    rawYaml.value = yaml.stringify(fullIngress.value, {
+    rawYaml.value = yaml.stringify(fullService.value, {
       sortMapEntries: true,
       indent: 2,
       keepBlobsInJSON: true
     })
     
-    rawJson.value = JSON.stringify(fullIngress.value, null, 2)
+    rawJson.value = JSON.stringify(fullService.value, null, 2)
   } catch (e) {
-    error.value = 'Failed to load ingress: ' + e.message
+    error.value = 'Failed to load service: ' + e.message
     console.error(e)
   } finally {
     loading.value = false
   }
 }
 
-// Fetch complete ingress data when modal opens
+// Fetch complete service data when modal opens
 watch(() => props.show, async (show) => {
   if (show) {
-    await fetchIngressData()
+    await fetchServiceData()
   }
 }, { immediate: true })
 
 function validateYaml(yamlContent) {
   try {
     const parsed = yaml.parse(yamlContent);
-    if (!parsed?.apiVersion || !parsed?.kind || !parsed?.metadata || !parsed?.spec) {
-      throw new Error('Missing required Kubernetes fields');
+    
+    // Check for required top-level fields
+    const requiredFields = ['apiVersion', 'kind', 'metadata', 'spec'];
+    const missingFields = requiredFields.filter(field => !parsed[field]);
+    
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
     }
+    
+    // Check metadata has name and namespace
+    if (!parsed.metadata.name || !parsed.metadata.namespace) {
+      throw new Error('Metadata must include name and namespace');
+    }
+    
+    // Check spec has ports and selector
+    if (!parsed.spec.ports || !parsed.spec.selector) {
+      throw new Error('Spec must include ports and selector');
+    }
+    
     return true;
   } catch (e) {
-    throw new Error(`Invalid YAML: ${e.message}`);
+    throw new Error(`YAML Validation Error: ${e.message}`);
+  }
+}
+
+function validateCurrentYaml() {
+  try {
+    validateYaml(rawYaml.value);
+    yamlError.value = null;
+  } catch (e) {
+    yamlError.value = e.message;
   }
 }
 
@@ -67,33 +93,40 @@ async function saveChanges() {
     loading.value = true;
     error.value = null;
 
-    // Remove status field before sending
-    const preparePayload = (content) => {
-      if (content.includes('status:')) {
-        return content.replace(/status:.*?(?=\n\w|$)/s, '').trim();
-      }
-      return content;
-    };
-
     let requestData = {};
     if (editingMode.value === 'yaml') {
-      const cleanedYaml = preparePayload(rawYaml.value);
-      if (!cleanedYaml.trim()) {
-        throw new Error('YAML content cannot be empty');
+      try {
+        // Parse the YAML first to validate
+        const parsedYaml = yaml.parse(rawYaml.value);
+        
+        // Validate required fields
+        if (!parsedYaml?.apiVersion || !parsedYaml?.kind || !parsedYaml?.metadata || !parsedYaml?.spec) {
+          throw new Error('Missing required Kubernetes fields in YAML');
+        }
+
+        // Clean the parsed object
+        const cleanedYaml = cleanServiceManifest(parsedYaml);
+        
+        // Convert back to YAML string for the request
+        requestData = { 
+          json: cleanedYaml // Send as JSON since we already parsed it
+        };
+      } catch (e) {
+        throw new Error(`YAML Error: ${e.message}`);
       }
-      requestData = { yaml: cleanedYaml };
     } else {
       try {
         const json = JSON.parse(rawJson.value);
-        delete json.status;
-        requestData = { json };
+        requestData = { 
+          json: cleanServiceManifest(json) 
+        };
       } catch (e) {
         throw new Error('Invalid JSON: ' + e.message);
       }
     }
 
     const response = await axios.put(
-      `/kube/ingresses/${props.ingress.namespace}/${props.ingress.name}`,
+      `/kube/services/${props.service.namespace}/${props.service.name}`,
       requestData,
       {
         headers: {
@@ -109,17 +142,28 @@ async function saveChanges() {
   } catch (err) {
     error.value = err.response?.data?.message || 
                  err.message || 
-                 'Failed to update ingress';
-    console.error('Update error:', {
-      error: err.response?.data,
-      request: err.config?.data
-    });
+                 'Failed to update service';
+    console.error('Update error:', err);
   } finally {
     loading.value = false;
   }
 }
 
-
+function cleanServiceManifest(manifest) {
+  // Remove immutable fields
+  const cleaned = { ...manifest };
+  delete cleaned.status;
+  delete cleaned.metadata?.managedFields;
+  delete cleaned.metadata?.uid;
+  delete cleaned.metadata?.resourceVersion;
+  delete cleaned.metadata?.creationTimestamp;
+  
+  // Ensure required fields exist
+  if (!cleaned.apiVersion) cleaned.apiVersion = 'v1';
+  if (!cleaned.kind) cleaned.kind = 'Service';
+  
+  return cleaned;
+}
 </script>
 
 <template>
@@ -133,7 +177,7 @@ async function saveChanges() {
         <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
           <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-              Edit Ingress: {{ ingress.name }} ({{ ingress.namespace }})
+              Edit Service: {{ service.name }} ({{ service.namespace }})
             </h3>
             
             <div class="flex mb-4 border-b">
@@ -168,10 +212,15 @@ async function saveChanges() {
                 <textarea
                   v-model="rawYaml"
                   class="w-full h-96 font-mono text-sm border rounded p-2"
+                  :class="{ 'border-red-500': yamlError }"
                   spellcheck="false"
+                  @input="validateCurrentYaml"
                 ></textarea>
-                <p class="mt-1 text-xs text-gray-500">
-                  Edit the full Ingress specification in YAML format
+                <p v-if="yamlError" class="mt-1 text-xs text-red-500">
+                  {{ yamlError }}
+                </p>
+                <p v-else class="mt-1 text-xs text-gray-500">
+                  Edit the full Service specification in YAML format
                 </p>
               </div>
 
@@ -183,7 +232,7 @@ async function saveChanges() {
                   spellcheck="false"
                 ></textarea>
                 <p class="mt-1 text-xs text-gray-500">
-                  Edit the full Ingress specification in JSON format
+                  Edit the full Service specification in JSON format
                 </p>
               </div>
             </template>

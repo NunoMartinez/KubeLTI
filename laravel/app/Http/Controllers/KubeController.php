@@ -16,7 +16,7 @@ class KubeController extends Controller
 
         return Http::baseUrl($this->baseUrl)
             ->withToken($token)
-            ->withoutVerifying()
+            ->withoutVerifying()    
             ->withOptions($options)
             ->send($method, $endpoint);
     }
@@ -159,30 +159,32 @@ private function parseCpu($cpu)
 
 
     public function pods()
-    {
-        try {
-            $response = $this->kubeRequest('/api/v1/pods');
-            $pods = $response->json()['items'];
+{
+    try {
+        $response = $this->kubeRequest('/api/v1/pods');
+        $items = $response->json()['items'];
 
-            $formattedPods = collect($pods)->map(function ($pod) {
-                $status = $pod['status']['phase'] ?? 'Unknown';
-                $restarts = collect($pod['status']['containerStatuses'] ?? [])
-                    ->sum(fn($cs) => $cs['restartCount'] ?? 0);
+        $formatted = collect($items)->map(function ($pod) {
+            $metadata = $pod['metadata'];
+            $status = $pod['status'];
+            $spec = $pod['spec'];
 
-                return [
-                    'name' => $pod['metadata']['name'],
-                    'namespace' => $pod['metadata']['namespace'],
-                    'status' => $status,
-                    'nodeName' => $pod['spec']['nodeName'] ?? 'N/A',
-                    'restarts' => $restarts,
-                ];
-            });
+            return [
+                'name' => $metadata['name'],
+                'namespace' => $metadata['namespace'],
+                'created_at' => $metadata['creationTimestamp'],
+                'status' => $status['phase'] ?? 'Unknown',
+                'node' => $spec['nodeName'] ?? 'N/A',
+                'ip' => $status['podIP'] ?? 'N/A',
+                'containers' => array_map(fn($c) => $c['name'], $spec['containers']),
+            ];
+        });
 
-            return response()->json($formattedPods);
-        } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to retrieve pods', 'message' => $e->getMessage()], 500);
-        }
+        return response()->json($formatted);
+    } catch (\Exception $e) {
+        return response()->json(['error' => 'Failed to retrieve pods', 'message' => $e->getMessage()], 500);
     }
+}
 
 public function createPod(Request $request)
 {
@@ -190,7 +192,8 @@ public function createPod(Request $request)
         'namespace' => 'required|string',
         'name' => 'required|string',
         'image' => 'required|string',
-        // Add more validation if needed
+        'containerName' => 'required|string',
+        'port' => 'nullable|integer'
     ]);
 
     $body = [
@@ -198,16 +201,15 @@ public function createPod(Request $request)
         'kind' => 'Pod',
         'metadata' => [
             'name' => $request->name,
-            'namespace' => $request->namespace,  // include namespace here, safer
+            'namespace' => $request->namespace,
         ],
         'spec' => [
             'containers' => [[
-                'name' => $request->name,
+                'name' => $request->containerName,
                 'image' => $request->image,
-                // optionally add 'imagePullPolicy', 'ports', etc. here if you want
-            ]],
-            'restartPolicy' => 'Always', // default restart policy, adjust as needed
-        ],
+                'ports' => $request->port ? [['containerPort' => (int)$request->port]] : []
+            ]]
+        ]
     ];
 
     try {
@@ -215,40 +217,38 @@ public function createPod(Request $request)
             "/api/v1/namespaces/{$request->namespace}/pods",
             'POST',
             [
-                'body' => json_encode($body),
                 'headers' => [
-                    'Accept' => 'application/json',
                     'Content-Type' => 'application/json',
-                    // Add Authorization if kubeRequest does not add it internally
+                    'Accept' => 'application/json'
                 ],
+                'body' => json_encode($body)
             ]
         );
 
-        if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-            $respBody = $response->getBody()->getContents();
-            return response()->json(['error' => 'Kubernetes API error', 'details' => json_decode($respBody, true)], $response->getStatusCode());
-        }
-
-        return response()->json(['message' => 'Pod created'], 201);
+        return response()->json($response->json(), $response->status());
     } catch (\Exception $e) {
-        return response()->json(['error' => 'Failed to create pod', 'message' => $e->getMessage()], 500);
+        return response()->json([
+            'error' => 'Failed to create pod',
+            'message' => $e->getMessage(),
+            'request_body' => $body
+        ], 500);
     }
 }
 
-
-public function deletePod(string $namespace, string $name)
+public function deletePod($namespace, $name)
 {
     try {
-        $response = $this->kubeRequest("/api/v1/namespaces/{$namespace}/pods/{$name}", 'DELETE');
+        $response = $this->kubeRequest(
+            "/api/v1/namespaces/{$namespace}/pods/{$name}",
+            'DELETE'
+        );
 
-        if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
-            $respBody = $response->getBody()->getContents();
-            return response()->json(['error' => 'Kubernetes API error', 'details' => json_decode($respBody, true)], $response->getStatusCode());
-        }
-
-        return response()->json(['message' => 'Pod deleted'], $response->getStatusCode());
+        return response()->json(['message' => 'Pod deleted'], $response->status());
     } catch (\Exception $e) {
-        return response()->json(['error' => 'Failed to delete pod', 'message' => $e->getMessage()], 500);
+        return response()->json([
+            'error' => 'Failed to delete pod',
+            'message' => $e->getMessage()
+        ], 500);
     }
 }
 
@@ -270,35 +270,36 @@ public function getPod($namespace, $name)
 public function updatePod(Request $request, $namespace, $name)
 {
     $request->validate([
-        'yaml' => 'required_without:json|string',
-        'json' => 'required_without:yaml|array'
+        'json' => 'required|array' // Now we only accept JSON
     ]);
 
     try {
-        if ($request->has('json')) {
-            $body = $request->json;
-        } else {
-            $yamlContent = trim($request->yaml);
-            if (empty($yamlContent)) {
-                throw new \Exception("YAML input cannot be empty");
-            }
-
-            $body = $this->parseYamlWithTimestamps($yamlContent);
-        }
-
-        // Convert all timestamps to strings
-        $body = $this->normalizePodTimestamps($body);
-      
-        $body = $this->normalizePodResources($body);
-        // Remove immutable/status fields
-        unset($body['status']);
-        unset($body['metadata']['managedFields']);
-        unset($body['metadata']['uid']);
-        unset($body['metadata']['resourceVersion']);
+        $body = $request->json;
 
         // Validate structure
         if (!isset($body['apiVersion'], $body['kind'], $body['metadata'], $body['spec'])) {
             throw new \Exception("Missing required Kubernetes fields");
+        }
+
+        // Ensure we're updating the correct resource
+        if (($body['metadata']['name'] ?? null) !== $name) {
+            throw new \Exception("Cannot change resource name");
+        }
+        if (($body['metadata']['namespace'] ?? null) !== $namespace) {
+            throw new \Exception("Cannot change resource namespace");
+        }
+        
+        // Ensure containers is an array and securityContext is an object
+        if (isset($body['spec'])) {
+            $this->ensureContainersIsArray($body['spec']);
+            $this->formatSecurityContext($body['spec']);
+            
+            // Format container resources properly
+            if (isset($body['spec']['containers']) && is_array($body['spec']['containers'])) {
+                foreach ($body['spec']['containers'] as &$container) {
+                    $this->formatContainerResources($container);
+                }
+            }
         }
 
         $response = $this->kubeRequest(
@@ -316,46 +317,39 @@ public function updatePod(Request $request, $namespace, $name)
         return response()->json($response->json(), $response->status());
     } catch (\Exception $e) {
         return response()->json([
-            'error' => 'Update failed',
-            'message' => $e->getMessage()
+            'error' => 'Pod update failed',
+            'message' => $e->getMessage(),
+            'details' => $e instanceof \Symfony\Component\Yaml\Exception\ParseException 
+                ? $e->getParsedLine() 
+                : null
         ], 500);
     }
 }
 
-private function normalizePodTimestamps($data)
+private function cleanPodManifest($manifest)
 {
-    $timestampFields = [
-        'creationTimestamp',
-        'lastProbeTime',
-        'lastTransitionTime',
-        'finishedAt',
-        'startedAt',
-        'startTime'
-    ];
+    // Remove immutable fields
+    unset(
+        $manifest['status'],
+        $manifest['metadata']['uid'],
+        $manifest['metadata']['resourceVersion'],
+        $manifest['metadata']['managedFields'],
+        $manifest['metadata']['creationTimestamp']
+    );
 
-    array_walk_recursive($data, function (&$value, $key) use ($timestampFields) {
-        if (in_array($key, $timestampFields)) {
-            if (is_numeric($value)) {
-                $value = date('Y-m-d\TH:i:s\Z', $value);
-            } elseif ($value instanceof \DateTime) {
-                $value = $value->format('Y-m-d\TH:i:s\Z');
-            }
-        }
-    });
-
-    return $data;
-}
-
-private function normalizePodResources($data)
-{
-    if (isset($data['spec']['containers'])) {
-        foreach ($data['spec']['containers'] as &$container) {
-            if (isset($container['resources']) && is_array($container['resources']) && empty($container['resources'])) {
-                $container['resources'] = new \stdClass(); // Converts to {} in JSON
+    // Ensure containers is an array, securityContext is an object, and format resources properly
+    if (isset($manifest['spec'])) {
+        $this->ensureContainersIsArray($manifest['spec']);
+        $this->formatSecurityContext($manifest['spec']);
+        
+        if (isset($manifest['spec']['containers']) && is_array($manifest['spec']['containers'])) {
+            foreach ($manifest['spec']['containers'] as &$container) {
+                $this->formatContainerResources($container);
             }
         }
     }
-    return $data;
+
+    return $manifest;
 }
  
 
@@ -459,6 +453,67 @@ public function deleteService($namespace, $name)
 }
 
 
+public function getService($namespace, $name)
+{
+    try {
+        $response = $this->kubeRequest("/api/v1/namespaces/{$namespace}/services/{$name}");
+        return response()->json($response->json());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Failed to get service',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+public function updateService(Request $request, $namespace, $name)
+{
+    $request->validate([
+        'yaml' => 'required_without:json|string',
+        'json' => 'required_without:yaml|array'
+    ]);
+
+    try {
+        $body = $request->has('json') 
+            ? $request->json 
+            : $this->parseYamlWithTimestamps(trim($request->yaml));
+
+        // Remove immutable fields
+        unset(
+            $body['status'],
+            $body['metadata']['uid'],
+            $body['metadata']['resourceVersion'],
+            $body['metadata']['managedFields'],
+            $body['metadata']['creationTimestamp']
+        );
+
+        // Validate structure
+        if (!isset($body['apiVersion'], $body['kind'], $body['metadata'], $body['spec'])) {
+            throw new \Exception("Missing required Kubernetes fields");
+        }
+
+        $response = $this->kubeRequest(
+            "/api/v1/namespaces/{$namespace}/services/{$name}",
+            'PUT',
+            [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json'
+                ],
+                'body' => json_encode($body, JSON_UNESCAPED_SLASHES)
+            ]
+        );
+
+        return response()->json($response->json(), $response->status());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Service update failed',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+
 
 
 
@@ -518,6 +573,92 @@ public function deleteService($namespace, $name)
             return response()->json(['message' => 'Namespace deleted'], $response->status());
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to delete namespace', 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function getNamespace(string $name)
+    {
+        try {
+            $response = $this->kubeRequest("/api/v1/namespaces/{$name}");
+            return response()->json($response->json(), $response->status());
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to retrieve namespace', 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function updateNamespace(Request $request, string $name)
+    {
+        $request->validate([
+            'yaml' => 'required_without:json|string',
+            'json' => 'required_without:yaml|array'
+        ]);
+
+        try {
+            $body = $request->has('json') 
+                ? $request->json 
+                : $this->parseYamlWithTimestamps(trim($request->yaml));
+
+            // Remove immutable fields
+            unset(
+                $body['status'],
+                $body['metadata']['uid'],
+                $body['metadata']['resourceVersion'],
+                $body['metadata']['managedFields'],
+                $body['metadata']['creationTimestamp']
+            );
+
+            // Validate structure
+            if (!isset($body['apiVersion'], $body['kind'], $body['metadata'])) {
+                throw new \Exception("Missing required Kubernetes fields");
+            }
+
+            // Check API version and kind
+            if ($body['apiVersion'] !== 'v1') {
+                throw new \Exception("Namespace in version \"{$body['apiVersion']}\" cannot be handled as a Namespace: no kind \"Namespace\" is registered for version \"{$body['apiVersion']}\" in scheme");
+            }
+            
+            if ($body['kind'] !== 'Namespace') {
+                throw new \Exception("Resource of type \"{$body['kind']}\" cannot be handled as a Namespace");
+            }
+
+            // Ensure we're updating the correct resource
+            if (($body['metadata']['name'] ?? null) !== $name) {
+                throw new \Exception("Cannot change resource name");
+            }
+
+            $response = $this->kubeRequest(
+                "/api/v1/namespaces/{$name}",
+                'PUT',
+                [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json'
+                    ],
+                    'body' => json_encode($body, JSON_UNESCAPED_SLASHES)
+                ]
+            );
+            
+            $responseData = $response->json();
+            
+            // Check if the response contains any error status
+            if ($response->status() >= 400 || 
+                (isset($responseData['status']) && $responseData['status'] === 'Failure')) {
+                return response()->json([
+                    'error' => 'Namespace update failed',
+                    'message' => $responseData['message'] ?? 'Unknown error from Kubernetes API',
+                    'details' => $responseData
+                ], $response->status() >= 400 ? $response->status() : 422);
+            }
+
+            return response()->json($responseData, $response->status());
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Namespace update failed',
+                'message' => $e->getMessage(),
+                'details' => $e instanceof \Symfony\Component\Yaml\Exception\ParseException 
+                    ? $e->getParsedLine() 
+                    : null
+            ], 500);
         }
     }
 
@@ -609,6 +750,212 @@ public function deleteService($namespace, $name)
             return response()->json(['error' => 'Failed to delete deployment', 'message' => $e->getMessage()], 500);
         }
     }
+
+   public function getDeployment($namespace, $name)
+{
+    try {
+        $response = $this->kubeRequest("/apis/apps/v1/namespaces/{$namespace}/deployments/{$name}");
+        return response()->json($response->json());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Failed to get deployment',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Helper function to properly format container resources
+ * This ensures resources are properly formatted for Kubernetes API
+ */
+private function formatContainerResources(&$container)
+{
+    if (!isset($container['resources'])) {
+        return;
+    }
+    
+    // If resources is an empty array, convert to empty object
+    if (is_array($container['resources']) && empty($container['resources'])) {
+        $container['resources'] = (object) [];
+        return;
+    }
+    
+    // If resources is not an array or object, set to empty object
+    if (!is_array($container['resources']) && !is_object($container['resources'])) {
+        $container['resources'] = (object) [];
+        return;
+    }
+    
+    // Handle limits and requests
+    if (isset($container['resources']['limits'])) {
+        // If limits is an empty array, convert to empty object
+        if (is_array($container['resources']['limits']) && empty($container['resources']['limits'])) {
+            $container['resources']['limits'] = (object) [];
+        }
+        // If limits is not an array or object but exists, convert to empty object
+        elseif (!is_array($container['resources']['limits']) && !is_object($container['resources']['limits'])) {
+            $container['resources']['limits'] = (object) [];
+        }
+    }
+    
+    if (isset($container['resources']['requests'])) {
+        // If requests is an empty array, convert to empty object
+        if (is_array($container['resources']['requests']) && empty($container['resources']['requests'])) {
+            $container['resources']['requests'] = (object) [];
+        }
+        // If requests is not an array or object but exists, convert to empty object
+        elseif (!is_array($container['resources']['requests']) && !is_object($container['resources']['requests'])) {
+            $container['resources']['requests'] = (object) [];
+        }
+    }
+}
+
+/**
+ * Ensure containers field is always an array
+ */
+private function ensureContainersIsArray(&$spec)
+{
+    // If containers doesn't exist, create an empty array
+    if (!isset($spec['containers'])) {
+        $spec['containers'] = [];
+        return;
+    }
+    
+    // If containers is not an array, but is an object, convert to array
+    if (!is_array($spec['containers']) && is_object($spec['containers'])) {
+        // Convert object to array
+        $containersArray = [];
+        foreach ($spec['containers'] as $key => $value) {
+            if (is_numeric($key)) {
+                $containersArray[(int)$key] = $value;
+            } else {
+                // If it's an associative object, it might be a single container
+                $containersArray[] = $spec['containers'];
+                break;
+            }
+        }
+        $spec['containers'] = $containersArray;
+    }
+    // If containers is not an array and not an object, make it an empty array
+    else if (!is_array($spec['containers'])) {
+        $spec['containers'] = [];
+    }
+}
+
+/**
+ * Ensure securityContext field is always an object
+ */
+private function formatSecurityContext(&$spec)
+{
+    // Handle securityContext at pod level
+    if (isset($spec['securityContext'])) {
+        // If securityContext is an array, convert to object
+        if (is_array($spec['securityContext']) && empty($spec['securityContext'])) {
+            $spec['securityContext'] = (object) [];
+        } elseif (is_array($spec['securityContext'])) {
+            $spec['securityContext'] = (object) $spec['securityContext'];
+        }
+    }
+    
+    // Handle securityContext at container level
+    if (isset($spec['containers']) && is_array($spec['containers'])) {
+        foreach ($spec['containers'] as &$container) {
+            if (isset($container['securityContext'])) {
+                // If securityContext is an array, convert to object
+                if (is_array($container['securityContext']) && empty($container['securityContext'])) {
+                    $container['securityContext'] = (object) [];
+                } elseif (is_array($container['securityContext'])) {
+                    $container['securityContext'] = (object) $container['securityContext'];
+                }
+            }
+        }
+    }
+}
+
+public function updateDeployment(Request $request, $namespace, $name)
+{
+    $request->validate([
+        'yaml' => 'required_without:json|string',
+        'json' => 'required_without:yaml|array'
+    ]);
+
+    try {
+        $body = $request->has('json') 
+            ? $request->json 
+            : $this->parseYamlWithTimestamps(trim($request->yaml));
+
+        // Remove immutable fields
+        unset(
+            $body['status'],
+            $body['metadata']['uid'],
+            $body['metadata']['resourceVersion'],
+            $body['metadata']['managedFields'],
+            $body['metadata']['creationTimestamp']
+        );
+
+        // Validate structure
+        if (!isset($body['apiVersion'], $body['kind'], $body['metadata'], $body['spec'])) {
+            throw new \Exception("Missing required Kubernetes fields");
+        }
+
+        // Check API version and kind
+        if ($body['apiVersion'] !== 'apps/v1') {
+            throw new \Exception("Deployment in version \"{$body['apiVersion']}\" cannot be handled as a Deployment: no kind \"Deployment\" is registered for version \"{$body['apiVersion']}\" in scheme");
+        }
+        
+        if ($body['kind'] !== 'Deployment') {
+            throw new \Exception("Resource of type \"{$body['kind']}\" cannot be handled as a Deployment");
+        }
+
+        // Ensure containers is an array and securityContext is an object
+        if (isset($body['spec']['template']['spec'])) {
+            $this->ensureContainersIsArray($body['spec']['template']['spec']);
+            $this->formatSecurityContext($body['spec']['template']['spec']);
+            
+            // Fix resources format in containers
+            if (isset($body['spec']['template']['spec']['containers']) && is_array($body['spec']['template']['spec']['containers'])) {
+                foreach ($body['spec']['template']['spec']['containers'] as &$container) {
+                    $this->formatContainerResources($container);
+                }
+            }
+        }
+
+        // Use JSON_UNESCAPED_SLASHES but NOT JSON_FORCE_OBJECT to ensure arrays remain arrays
+        $response = $this->kubeRequest(
+            "/apis/apps/v1/namespaces/{$namespace}/deployments/{$name}",
+            'PUT',
+            [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json'
+                ],
+                'body' => json_encode($body, JSON_UNESCAPED_SLASHES)
+            ]
+        );
+        
+        $responseData = $response->json();
+        
+        // Check if the response contains any error status
+        if ($response->status() >= 400 || 
+            (isset($responseData['status']) && $responseData['status'] === 'Failure')) {
+            return response()->json([
+                'error' => 'Deployment update failed',
+                'message' => $responseData['message'] ?? 'Unknown error from Kubernetes API',
+                'details' => $responseData
+            ], $response->status() >= 400 ? $response->status() : 422);
+        }
+
+        return response()->json($responseData, $response->status());
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Deployment update failed',
+            'message' => $e->getMessage(),
+            'details' => $e instanceof \Symfony\Component\Yaml\Exception\ParseException 
+                ? $e->getParsedLine() 
+                : null
+        ], 500);
+    }
+}
 
 
 
@@ -787,8 +1134,20 @@ public function updateIngress(Request $request, $namespace, $name)
                 'body' => json_encode($body, JSON_UNESCAPED_SLASHES)
             ]
         );
+        
+        $responseData = $response->json();
+        
+        // Check if the response contains any error status
+        if ($response->status() >= 400 || 
+            (isset($responseData['status']) && $responseData['status'] === 'Failure')) {
+            return response()->json([
+                'error' => 'Ingress update failed',
+                'message' => $responseData['message'] ?? 'Unknown error from Kubernetes API',
+                'details' => $responseData
+            ], $response->status() >= 400 ? $response->status() : 422);
+        }
 
-        return response()->json($response->json(), $response->status());
+        return response()->json($responseData, $response->status());
     } catch (\Exception $e) {
         return response()->json([
             'error' => 'Update failed',

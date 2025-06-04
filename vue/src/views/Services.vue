@@ -1,11 +1,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import EditServiceModal from '@/components/EditServiceModal.vue'
 
 const services = ref([])
 const namespaces = ref([])
 const loading = ref(false)
 const notification = ref({ message: '', type: '' })
+const showEditModal = ref(false)
+const currentService = ref(null)
 
 const form = ref({
   namespace: 'default',
@@ -18,8 +21,10 @@ const form = ref({
 
 // Fetch initial data
 onMounted(async () => {
-  await fetchServices()
-  await fetchNamespaces()
+  await Promise.all([
+    fetchServices(),
+    fetchNamespaces()
+  ])
 })
 
 async function fetchServices() {
@@ -41,6 +46,16 @@ async function fetchNamespaces() {
   } catch (e) {
     showNotification('Failed to fetch namespaces', 'error')
   }
+}
+
+function editService(service) {
+  currentService.value = service
+  showEditModal.value = true
+}
+
+function onServiceUpdated() {
+  showNotification('Service updated successfully')
+  fetchServices()
 }
 
 function showNotification(msg, type = 'success') {
@@ -183,7 +198,11 @@ function resetForm() {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               {{ svc.ports }}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+              <button @click="editService(svc)"
+                      class="text-blue-600 hover:text-blue-900">
+                Edit
+              </button>
               <button @click="deleteService(svc.namespace, svc.name)"
                       class="text-red-600 hover:text-red-900">
                 Delete
@@ -198,4 +217,12 @@ function resetForm() {
       </div>
     </div>
   </div>
+
+  <EditServiceModal 
+    v-if="currentService"
+    :service="currentService"
+    :show="showEditModal"
+    @close="showEditModal = false"
+    @updated="onServiceUpdated"
+  />
 </template>

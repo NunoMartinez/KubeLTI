@@ -18,6 +18,7 @@ function editIngress(ingress) {
 }
 
 function onIngressUpdated() {
+  showNotification('Ingress updated successfully')
   fetchIngresses()
 }
 

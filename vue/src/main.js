@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import axios from 'axios'
-import { io } from 'socket.io-client'
+
 import Toast, { POSITION } from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 
@@ -23,7 +23,6 @@ console.log('ws connection', wsConnection)
 
 axios.defaults.baseURL = `http://${apiDomain}/api`
 
-app.provide('socket', io(wsConnection))
 
 app.provide('serverBaseUrl', apiDomain)
 

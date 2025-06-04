@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
+import EditDeploymentModal from '@/components/EditDeploymentModal.vue'
 
 const deployments = ref([])
 const namespaces = ref([])
@@ -8,6 +9,19 @@ const namespaces = ref([])
 const loadingDeployments = ref(false)
 const loadingCreate = ref(false)
 const loadingDelete = ref(null) // store name of deleting deployment for per-row spinner
+const showEditModal = ref(false)
+const currentDeployment = ref(null)
+
+
+function editDeployment(deployment) {
+  currentDeployment.value = deployment
+  showEditModal.value = true
+}
+
+function onDeploymentUpdated() {
+  showNotification('Deployment updated successfully')
+  fetchDeployments()
+}
 
 const notification = ref({ message: '', type: '' }) // {type: 'success'|'error'}
 
@@ -179,6 +193,7 @@ onMounted(() => {
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Replicas</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Available</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             <th class="px-6 py-3"></th>
           </tr>
         </thead>
@@ -189,16 +204,22 @@ onMounted(() => {
             <td class="px-6 py-4 text-sm text-gray-600">{{ dep.replicas }}</td>
             <td class="px-6 py-4 text-sm text-gray-600">{{ dep.available }}</td>
             <td class="px-6 py-4 text-sm text-gray-500">{{ new Date(dep.created_at).toLocaleString() }}</td>
-            <td class="px-6 py-4 text-right">
-              <button
-                @click="deleteDeployment(dep.namespace, dep.name)"
-                class="text-red-600 hover:underline text-sm flex items-center"
-                :disabled="loadingDelete === dep.name"
-              >
-                <span v-if="loadingDelete === dep.name" class="loader mr-1"></span>
-                Delete
-              </button>
-            </td>
+         <td class="px-6 py-4 text-right text-sm font-medium space-x-2">
+  <button
+    @click="editDeployment(dep)"
+    class="text-blue-600 hover:text-blue-900"
+  >
+    Edit
+  </button>
+  <button
+    @click="deleteDeployment(dep.namespace, dep.name)"
+    class="text-red-600 hover:text-red-900 flex items-center"
+    :disabled="loadingDelete === dep.name"
+  >
+    <span v-if="loadingDelete === dep.name" class="loader mr-1"></span>
+    Delete
+  </button>
+</td>
           </tr>
         </tbody>
       </table>
@@ -212,6 +233,13 @@ onMounted(() => {
       </div>
     </div>
   </div>
+  <EditDeploymentModal 
+    v-if="currentDeployment"
+    :deployment="currentDeployment"
+    :show="showEditModal"
+    @close="showEditModal = false"
+    @updated="onDeploymentUpdated"
+  />
 </template>
 
 <style>

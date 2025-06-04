@@ -14,19 +14,14 @@ import { RouterLink, RouterView } from 'vue-router'
         >
           Login
         </RouterLink>
-        <RouterLink to="/dashboard"
-  class="text-gray-900 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-  active-class="text-blue-600 font-semibold">
-  Dashboard
-</RouterLink>
+        
 
         <!-- Add more links as needed later -->
       </nav>
     </header>
 
-   <main class="flex min-h-screen bg-gray-50">
-  <Sidebar />
-  <div class="flex-1 overflow-auto ">
+   <main class="min-h-screen bg-gray-50 flex flex-col">
+  <div class="flex-1">
     <RouterView />
   </div>
 </main>

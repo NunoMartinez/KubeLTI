@@ -4,7 +4,7 @@ import * as yaml from 'yaml'
 import axios from 'axios'
 
 const props = defineProps({
-  pod: Object,
+  deployment: Object,
   show: Boolean
 })
 
@@ -16,39 +16,39 @@ const rawJson = ref('')
 const error = ref(null)
 const yamlError = ref(null)
 const loading = ref(false)
-const fullPod = ref(null)
+const fullDeployment = ref(null)
 
-// Function to fetch pod data
-async function fetchPodData() {
-  if (!props.pod) return;
+// Function to fetch deployment data
+async function fetchDeploymentData() {
+  if (!props.deployment) return;
   
   error.value = null
   yamlError.value = null
   try {
     loading.value = true
-    const response = await axios.get(`/kube/pods/${props.pod.namespace}/${props.pod.name}`)
-    fullPod.value = response.data
+    const response = await axios.get(`/kube/deployments/${props.deployment.namespace}/${props.deployment.name}`)
+    fullDeployment.value = response.data
     
     // Convert to proper editing formats
-    rawYaml.value = yaml.stringify(fullPod.value, {
+    rawYaml.value = yaml.stringify(fullDeployment.value, {
       sortMapEntries: true,
       indent: 2,
       keepBlobsInJSON: true
     })
     
-    rawJson.value = JSON.stringify(fullPod.value, null, 2)
+    rawJson.value = JSON.stringify(fullDeployment.value, null, 2)
   } catch (e) {
-    error.value = 'Failed to load pod: ' + e.message
+    error.value = 'Failed to load deployment: ' + e.message
     console.error(e)
   } finally {
     loading.value = false
   }
 }
 
-// Fetch complete pod data when modal opens
+// Fetch complete deployment data when modal opens
 watch(() => props.show, async (show) => {
   if (show) {
-    await fetchPodData()
+    await fetchDeploymentData()
   }
 }, { immediate: true })
 
@@ -69,10 +69,8 @@ function validateYaml(yamlContent) {
       throw new Error('Metadata must include name and namespace');
     }
     
-    // Check spec has containers
-    if (!parsed.spec.containers || parsed.spec.containers.length === 0) {
-      throw new Error('Pod spec must include at least one container');
-    }
+    // We no longer validate apiVersion and kind here
+    // Let the backend handle those validations and return proper error messages
     
     return true;
   } catch (e) {
@@ -89,72 +87,73 @@ function validateCurrentYaml() {
   }
 }
 
-function cleanPodManifest(manifest) {
+function cleanDeploymentManifest(manifest) {
   // Create a deep copy
-  const cleaned = JSON.parse(JSON.stringify(manifest));
+  const cleaned = JSON.parse(JSON.stringify(manifest))
   
   // Remove immutable fields
-  delete cleaned.status;
-  delete cleaned.metadata?.managedFields;
-  delete cleaned.metadata?.uid;
-  delete cleaned.metadata?.resourceVersion;
-  delete cleaned.metadata?.creationTimestamp;
+  delete cleaned.status
+  delete cleaned.metadata?.managedFields
+  delete cleaned.metadata?.uid
+  delete cleaned.metadata?.resourceVersion
+  delete cleaned.metadata?.creationTimestamp
   
-  // Ensure required fields exist
-  if (!cleaned.apiVersion) cleaned.apiVersion = 'v1';
-  if (!cleaned.kind) cleaned.kind = 'Pod';
-  
-  // Handle securityContext at pod level
-  if (cleaned.spec?.securityContext) {
-    // If securityContext is an array, convert to object
-    if (Array.isArray(cleaned.spec.securityContext)) {
-      cleaned.spec.securityContext = {};
+  // We no longer force apiVersion and kind
+  // Let the user specify them and get proper error messages if they're invalid
+
+  // Ensure containers is an array and securityContext is an object
+  if (cleaned.spec?.template?.spec) {
+    const spec = cleaned.spec.template.spec
+    
+    // Handle securityContext at pod level
+    if (spec.securityContext) {
+      // If securityContext is an array, convert to object
+      if (Array.isArray(spec.securityContext)) {
+        spec.securityContext = {}
+      }
     }
-  }
-  
-  // Ensure containers is an array
-  if (cleaned.spec) {
+    
     // If containers doesn't exist or is not an array, initialize it
-    if (!cleaned.spec.containers || !Array.isArray(cleaned.spec.containers)) {
+    if (!spec.containers || !Array.isArray(spec.containers)) {
       // If it's an object but not an array, try to convert it
-      if (cleaned.spec.containers && typeof cleaned.spec.containers === 'object') {
-        const containersArray = [];
+      if (spec.containers && typeof spec.containers === 'object') {
+        const containersArray = []
         // Try to convert object to array if it has numeric keys
-        let isNumericKeys = false;
-        for (const key in cleaned.spec.containers) {
+        let isNumericKeys = false
+        for (const key in spec.containers) {
           if (!isNaN(parseInt(key))) {
-            containersArray[parseInt(key)] = cleaned.spec.containers[key];
-            isNumericKeys = true;
+            containersArray[parseInt(key)] = spec.containers[key]
+            isNumericKeys = true
           }
         }
         
         // If not numeric keys, it might be a single container object
-        if (!isNumericKeys && Object.keys(cleaned.spec.containers).length > 0) {
-          containersArray.push(cleaned.spec.containers);
+        if (!isNumericKeys && Object.keys(spec.containers).length > 0) {
+          containersArray.push(spec.containers)
         }
         
-        cleaned.spec.containers = containersArray;
+        spec.containers = containersArray
       } else {
         // Initialize as empty array if not an object
-        cleaned.spec.containers = [];
+        spec.containers = []
       }
     }
     
     // Fix resources format in containers and handle container securityContext
-    if (Array.isArray(cleaned.spec.containers)) {
-      cleaned.spec.containers.forEach(container => {
+    if (Array.isArray(spec.containers)) {
+      spec.containers.forEach(container => {
         // Handle resources field properly
         if (container.resources) {
           // If resources is an array or not an object, replace with empty object
           if (Array.isArray(container.resources) || typeof container.resources !== 'object') {
-            container.resources = {};
+            container.resources = {}
           } else {
             // Ensure limits and requests are objects, not arrays
             if (container.resources.limits && Array.isArray(container.resources.limits)) {
-              container.resources.limits = {};
+              container.resources.limits = {}
             }
             if (container.resources.requests && Array.isArray(container.resources.requests)) {
-              container.resources.requests = {};
+              container.resources.requests = {}
             }
           }
         }
@@ -163,51 +162,47 @@ function cleanPodManifest(manifest) {
         if (container.securityContext) {
           // If securityContext is an array, convert to object
           if (Array.isArray(container.securityContext)) {
-            container.securityContext = {};
+            container.securityContext = {}
           }
         }
-      });
+      })
     }
   }
   
-  return cleaned;
+  return cleaned
 }
 
 async function saveChanges() {
   try {
-    loading.value = true;
-    error.value = null;
-    yamlError.value = null;
+    loading.value = true
+    error.value = null
+    yamlError.value = null
 
-    let requestData = {};
+    let requestData = {}
     if (editingMode.value === 'yaml') {
       try {
         // Parse and validate YAML first
-        const parsedYaml = yaml.parse(rawYaml.value);
-        validateYaml(rawYaml.value);
+        const parsedYaml = yaml.parse(rawYaml.value)
+        validateYaml(rawYaml.value)
         
-        // Clean the parsed object
-        const cleaned = cleanPodManifest(parsedYaml);
-        
-        requestData = { 
-          json: cleaned // Send as JSON since we already parsed it
-        };
+        // Clean the manifest (fixes resources array issue)
+        const cleaned = cleanDeploymentManifest(parsedYaml)
+        requestData = { json: cleaned }
       } catch (e) {
-        throw new Error(`YAML Error: ${e.message}`);
+        throw new Error(`YAML Error: ${e.message}`)
       }
     } else {
       try {
-        const json = JSON.parse(rawJson.value);
-        requestData = { 
-          json: cleanPodManifest(json) 
-        };
+        const json = JSON.parse(rawJson.value)
+        const cleaned = cleanDeploymentManifest(json)
+        requestData = { json: cleaned }
       } catch (e) {
-        throw new Error('Invalid JSON: ' + e.message);
+        throw new Error('Invalid JSON: ' + e.message)
       }
     }
 
     const response = await axios.put(
-      `/kube/pods/${props.pod.namespace}/${props.pod.name}`,
+      `/kube/deployments/${props.deployment.namespace}/${props.deployment.name}`,
       requestData,
       {
         headers: {
@@ -215,27 +210,41 @@ async function saveChanges() {
           'Accept': 'application/json'
         }
       }
-    );
+    )
 
-    // Only emit updated and close if we get here (no error thrown)
-    emit('updated');
-    emit('close');
+    // Check if the response contains any error messages
+    // Even with a 200 status, the API might return error information
+    if (response.data.error || response.data.message?.includes('failed') || response.data.message?.includes('error')) {
+      error.value = response.data.message || response.data.error || 'Update partially failed';
+      console.error('Update partial failure:', response.data);
+      return; // Don't close the modal
+    }
+
+    // Only emit updated and close if we get here (no error detected)
+    emit('updated')
+    emit('close')
   } catch (err) {
     error.value = err.response?.data?.message || 
+                 err.response?.data?.error ||
                  err.message || 
-                 'Failed to update pod';
+                 'Failed to update deployment'
+    
+    // Log detailed error information for debugging
     console.error('Update error:', {
-      error: err.response?.data,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data,
+      message: err.message,
       request: err.config?.data
-    });
+    })
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 </script>
 
 <template>
-  <Transition name="modal">
+   <Transition name="modal">
     <div v-if="show" class="fixed inset-0 z-50 overflow-y-auto">
       <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center">
         <div class="fixed inset-0 transition-opacity" aria-hidden="true">
@@ -245,7 +254,7 @@ async function saveChanges() {
         <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
           <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-              Edit Pod: {{ pod.name }} ({{ pod.namespace }})
+              Edit Deployment: {{ deployment.name }} ({{ deployment.namespace }})
             </h3>
             
             <div class="flex mb-4 border-b">
@@ -288,7 +297,7 @@ async function saveChanges() {
                   {{ yamlError }}
                 </p>
                 <p v-else class="mt-1 text-xs text-gray-500">
-                  Edit the full Pod specification in YAML format
+                  Edit the full Deployment specification in YAML format
                 </p>
               </div>
 
@@ -300,7 +309,7 @@ async function saveChanges() {
                   spellcheck="false"
                 ></textarea>
                 <p class="mt-1 text-xs text-gray-500">
-                  Edit the full Pod specification in JSON format
+                  Edit the full Deployment specification in JSON format
                 </p>
               </div>
             </template>
@@ -327,3 +336,29 @@ async function saveChanges() {
     </div>
   </Transition>
 </template>
+
+<style scoped>
+.loader {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3b82f6;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+</style>
