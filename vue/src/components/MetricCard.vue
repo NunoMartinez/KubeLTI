@@ -70,6 +70,7 @@ const getIconBgClass = () => {
   if (props.icon === 'cpu') return 'bg-blue-100'
   if (props.icon === 'memory') return 'bg-green-100'
   if (props.icon === 'pods') return 'bg-purple-100'
+  if (props.icon === 'disk') return 'bg-amber-100'
   return 'bg-gray-100'
 }
 
@@ -78,6 +79,7 @@ const getIconColorClass = () => {
   if (props.icon === 'cpu') return 'text-blue-600'
   if (props.icon === 'memory') return 'text-green-600'
   if (props.icon === 'pods') return 'text-purple-600'
+  if (props.icon === 'disk') return 'text-amber-600'
   return 'text-gray-600'
 }
 
@@ -108,6 +110,8 @@ const getIconPath = () => {
       return 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'
     case 'pods':
       return 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10'
+    case 'disk':
+      return 'M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v14h12V5H6zm3 8h6m-6-4h6'
     default:
       return 'M13 10V3L4 14h7v7l9-11h-7z'
   }

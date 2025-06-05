@@ -24,8 +24,63 @@ class KubeController extends Controller
     public function proxy()
     {
         try {
+            // Get basic API info
             $response = $this->kubeRequest('/api');
-            return response()->json($response->json(), $response->status());
+            $apiData = $response->json();
+            
+            // Get cluster start time from kube-system namespace
+            $componentStatusResponse = $this->kubeRequest('/api/v1/componentstatuses');
+            $componentStatuses = $componentStatusResponse->json();
+            
+            // Get nodes to find the oldest node (master node) creation time
+            $nodesResponse = $this->kubeRequest('/api/v1/nodes');
+            $nodes = $nodesResponse->json()['items'] ?? [];
+            
+            // Find the oldest master node
+            $oldestMasterTime = null;
+            foreach ($nodes as $node) {
+                $labels = $node['metadata']['labels'] ?? [];
+                $nodeName = $node['metadata']['name'] ?? '';
+                $creationTime = $node['metadata']['creationTimestamp'] ?? null;
+                
+                // Check if it's a master node
+                $isMaster = false;
+                if (str_contains(strtolower($nodeName), 'master') || 
+                    str_contains(strtolower($nodeName), 'control')) {
+                    $isMaster = true;
+                } else {
+                    // Check labels for master role
+                    foreach ($labels as $key => $value) {
+                        if ((str_contains($key, 'master') || str_contains($key, 'control-plane')) ||
+                            (str_contains($value, 'master') || str_contains($value, 'control-plane'))) {
+                            $isMaster = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if ($isMaster && $creationTime) {
+                    $nodeTime = strtotime($creationTime);
+                    if ($oldestMasterTime === null || $nodeTime < $oldestMasterTime) {
+                        $oldestMasterTime = $nodeTime;
+                    }
+                }
+            }
+            
+            // Calculate uptime if we found a master node
+            $uptime = null;
+            if ($oldestMasterTime !== null) {
+                $uptime = time() - $oldestMasterTime;
+            }
+            
+            // Add uptime to the response
+            $result = [
+                'versions' => $apiData['versions'] ?? [],
+                'uptime' => $uptime,
+                'componentStatuses' => $componentStatuses['items'] ?? []
+            ];
+            
+            return response()->json($result);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Failed to connect to Kubernetes API',
@@ -48,7 +103,8 @@ class KubeController extends Controller
         $metrics = [
             'cpu' => ['total' => 0, 'used' => 0],
             'memory' => ['total' => 0, 'used' => 0],
-            'pods' => ['total' => 0, 'running' => 0]
+            'pods' => ['total' => 0, 'running' => 0],
+            'disk' => ['total' => 0, 'used' => 0, 'volumes' => []]
         ];
         
         // Process node metrics
@@ -56,6 +112,23 @@ class KubeController extends Controller
             $metrics['cpu']['total'] += (int)$node['status']['capacity']['cpu'];
             $metrics['memory']['total'] += $this->convertToGB($node['status']['capacity']['memory']);
             $metrics['pods']['total'] += (int)$node['status']['capacity']['pods'];
+            
+            // Extract disk information from node status
+            if (isset($node['status']['allocatable']['ephemeral-storage'])) {
+                $allocatableStorage = $this->convertToGB($node['status']['allocatable']['ephemeral-storage']);
+                $metrics['disk']['total'] += $allocatableStorage;
+            }
+            
+            // Extract node conditions for disk pressure
+            if (isset($node['status']['conditions'])) {
+                foreach ($node['status']['conditions'] as $condition) {
+                    if ($condition['type'] === 'DiskPressure') {
+                        $nodeName = $node['metadata']['name'];
+                        $metrics['disk']['pressure'][$nodeName] = $condition['status'] === 'True';
+                        break;
+                    }
+                }
+            }
         }
         
         foreach ($nodeMetrics['items'] as $metric) {
@@ -67,6 +140,38 @@ class KubeController extends Controller
         $podMetrics = $this->kubeRequest('/apis/metrics.k8s.io/v1beta1/pods')->json();
         $metrics['pods']['running'] = count($podMetrics['items']);
         
+        // Get persistent volume information
+        try {
+            $pvResponse = $this->kubeRequest('/api/v1/persistentvolumes');
+            $pvs = $pvResponse->json()['items'] ?? [];
+            
+            $metrics['disk']['volumes'] = [];
+            foreach ($pvs as $pv) {
+                $name = $pv['metadata']['name'] ?? 'unknown';
+                $capacity = $pv['spec']['capacity']['storage'] ?? '0';
+                $status = $pv['status']['phase'] ?? 'Unknown';
+                $storageClass = $pv['spec']['storageClassName'] ?? 'default';
+                $claimRef = $pv['spec']['claimRef'] ?? null;
+                $claimName = $claimRef ? ($claimRef['name'] ?? 'unbound') : 'unbound';
+                $claimNamespace = $claimRef ? ($claimRef['namespace'] ?? '') : '';
+                
+                $metrics['disk']['volumes'][] = [
+                    'name' => $name,
+                    'capacity' => $this->convertToGB($capacity),
+                    'status' => $status,
+                    'storageClass' => $storageClass,
+                    'claim' => $claimName !== 'unbound' ? "$claimNamespace/$claimName" : 'unbound'
+                ];
+            }
+            
+            // Calculate used disk space based on PVs
+            $metrics['disk']['used'] = array_sum(array_column($metrics['disk']['volumes'], 'capacity'));
+        } catch (\Exception $e) {
+            // If PV fetching fails, continue with other metrics
+            $metrics['disk']['volumes'] = [];
+            $metrics['disk']['volumeError'] = $e->getMessage();
+        }
+        
         return response()->json($metrics);
         
     } catch (\Exception $e) {
@@ -74,13 +179,38 @@ class KubeController extends Controller
     }
 }
 
-private function convertToGB($memory)
+private function convertToGB($value)
 {
-    if (str_contains($memory, 'Ki')) {
-        return (int)filter_var($memory, FILTER_SANITIZE_NUMBER_INT) / 1024 / 1024;
+    $numericValue = (int)filter_var($value, FILTER_SANITIZE_NUMBER_INT);
+    
+    if (str_contains($value, 'Ki')) {
+        return $numericValue / 1024 / 1024; // KiB to GB
+    } elseif (str_contains($value, 'Mi')) {
+        return $numericValue / 1024; // MiB to GB
+    } elseif (str_contains($value, 'Gi')) {
+        return $numericValue; // GiB to GB
+    } elseif (str_contains($value, 'Ti')) {
+        return $numericValue * 1024; // TiB to GB
+    } elseif (str_contains($value, 'Pi')) {
+        return $numericValue * 1024 * 1024; // PiB to GB
+    } elseif (str_contains($value, 'Ei')) {
+        return $numericValue * 1024 * 1024 * 1024; // EiB to GB
+    } elseif (str_contains($value, 'K') || str_contains($value, 'k')) {
+        return $numericValue / 1000 / 1000; // KB to GB
+    } elseif (str_contains($value, 'M') || str_contains($value, 'm')) {
+        return $numericValue / 1000; // MB to GB
+    } elseif (str_contains($value, 'G') || str_contains($value, 'g')) {
+        return $numericValue; // GB to GB
+    } elseif (str_contains($value, 'T') || str_contains($value, 't')) {
+        return $numericValue * 1000; // TB to GB
+    } elseif (str_contains($value, 'P') || str_contains($value, 'p')) {
+        return $numericValue * 1000 * 1000; // PB to GB
+    } elseif (str_contains($value, 'E') || str_contains($value, 'e')) {
+        return $numericValue * 1000 * 1000 * 1000; // EB to GB
     }
-    // Add other conversions if needed
-    return 0;
+    
+    // If no unit is specified, assume bytes and convert to GB
+    return $numericValue / 1024 / 1024 / 1024;
 }
 
 private function parseCpu($cpu)
@@ -124,15 +254,37 @@ private function parseCpu($cpu)
                 $memoryGb = round(((int) filter_var($memoryKi, FILTER_SANITIZE_NUMBER_INT)) / 1024 / 1024, 1);
 
                 $taints = $node['spec']['taints'] ?? [];
+                $nodeName = $node['metadata']['name'];
                 $role = 'Worker';
 
-                foreach ($taints as $taint) {
-                    if (
-                        str_contains($taint['key'], 'master') ||
-                        str_contains($taint['key'], 'control-plane')
-                    ) {
-                        $role = 'Master';
-                        break;
+                // Check if node name contains 'master' or 'control'
+                if (
+                    str_contains(strtolower($nodeName), 'master') || 
+                    str_contains(strtolower($nodeName), 'control')
+                ) {
+                    $role = 'Master';
+                } else {
+                    // If name doesn't indicate it's a master, check taints
+                    foreach ($taints as $taint) {
+                        if (
+                            str_contains($taint['key'], 'master') ||
+                            str_contains($taint['key'], 'control-plane')
+                        ) {
+                            $role = 'Master';
+                            break;
+                        }
+                    }
+                    
+                    // Also check labels for master role
+                    $labels = $node['metadata']['labels'] ?? [];
+                    foreach ($labels as $key => $value) {
+                        if (
+                            (str_contains($key, 'master') || str_contains($key, 'control-plane')) ||
+                            (str_contains($value, 'master') || str_contains($value, 'control-plane'))
+                        ) {
+                            $role = 'Master';
+                            break;
+                        }
                     }
                 }
 

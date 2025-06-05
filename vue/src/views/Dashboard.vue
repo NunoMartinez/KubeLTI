@@ -93,7 +93,7 @@
         </div>
       </div>
       
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard 
           title="CPU Usage" 
           :value="metrics.cpu.used" 
@@ -114,19 +114,26 @@
           :max="metrics.pods.total"
           icon="pods"
         />
+        <MetricCard 
+          title="Disk Usage" 
+          :value="metrics.disk?.used || 0" 
+          :max="metrics.disk?.total || 0"
+          unit="GB"
+          icon="disk"
+        />
       </div>
     </div>
     
     <!-- Nodes Status Panel -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-8">
-      <div class="p-6 border-b border-gray-200 flex justify-between items-center">
-        <div class="flex items-center">
+      <div class="p-6 border-b border-gray-200 flex flex-col md:flex-row md:justify-between md:items-center">
+        <div class="flex items-center mb-3 md:mb-0">
           <svg class="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path>
           </svg>
           <h2 class="text-xl font-semibold text-gray-800">Nodes Status</h2>
         </div>
-        <div class="flex items-center space-x-3">
+        <div class="flex flex-wrap gap-3">
           <div class="flex items-center">
             <div class="w-3 h-3 rounded-full bg-green-500 mr-1"></div>
             <span class="text-xs text-gray-600">{{ onlineNodesCount }} Online</span>
@@ -134,6 +141,18 @@
           <div class="flex items-center">
             <div class="w-3 h-3 rounded-full bg-red-500 mr-1"></div>
             <span class="text-xs text-gray-600">{{ offlineNodesCount }} Offline</span>
+          </div>
+          <div class="flex items-center">
+            <svg class="h-4 w-4 text-blue-600 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+            </svg>
+            <span class="text-xs text-blue-700">{{ masterNodesCount }} Master</span>
+          </div>
+          <div class="flex items-center">
+            <svg class="h-4 w-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+            </svg>
+            <span class="text-xs text-gray-600">{{ workerNodesCount }} Worker</span>
           </div>
           <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
             {{ nodes.length }} Total
@@ -171,14 +190,31 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
       <!-- Pods Distribution Panel -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div class="flex items-center justify-between mb-6">
-          <div class="flex items-center">
-            <svg class="h-5 w-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-            </svg>
-            <h2 class="text-xl font-semibold text-gray-800">Pods per Node</h2>
+        <div class="flex flex-col space-y-2 mb-6">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center">
+              <svg class="h-5 w-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+              </svg>
+              <h2 class="text-xl font-semibold text-gray-800">Pods per Node</h2>
+            </div>
+            <span class="text-sm text-gray-500">Total: {{ metrics.pods.running }} pods</span>
           </div>
-          <span class="text-sm text-gray-500">Total: {{ metrics.pods.running }} pods</span>
+          
+          <div class="flex items-center justify-end space-x-4 text-xs">
+            <div class="flex items-center">
+              <div class="w-3 h-3 rounded-sm bg-blue-500 border-2 border-blue-600 mr-1"></div>
+              <span class="text-gray-600">Master Node</span>
+            </div>
+            <div class="flex items-center">
+              <div class="w-3 h-3 rounded-sm bg-green-500 mr-1"></div>
+              <span class="text-gray-600">Worker Node</span>
+            </div>
+            <div class="flex items-center">
+              <div class="w-3 h-3 rounded-sm bg-gray-400 mr-1"></div>
+              <span class="text-gray-600">Offline Node</span>
+            </div>
+          </div>
         </div>
         
         <div v-if="nodes.length === 0 && !loading" class="py-12 text-center">
@@ -244,33 +280,133 @@
           <div
             v-for="node in nodes"
             :key="node.name"
-            class="flex items-center"
+            class="flex items-center p-2 rounded-lg"
+            :class="{'bg-blue-50': node.role === 'Master'}"
           >
             <div class="w-1/4 flex items-center">
-              <div class="w-2 h-2 rounded-full mr-2" :class="node.status === 'Online' ? 'bg-green-500' : 'bg-red-500'"></div>
-              <span class="text-sm font-medium text-gray-700 truncate pr-2">
-                {{ node.name }}
-              </span>
+              <div class="flex items-center justify-center w-6 h-6 rounded-full mr-2" 
+                :class="node.role === 'Master' ? 'bg-blue-100' : 'bg-gray-100'">
+                <svg v-if="node.role === 'Master'" class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                </svg>
+                <svg v-else class="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                </svg>
+              </div>
+              <div class="flex flex-col">
+                <span class="text-sm font-medium truncate pr-2" 
+                  :class="node.role === 'Master' ? 'text-blue-700' : 'text-gray-700'">
+                  {{ node.name }}
+                </span>
+                <span class="text-xs text-gray-500">
+                  {{ node.role }}
+                </span>
+              </div>
             </div>
             <div class="w-3/4 flex items-center">
               <div class="w-full mr-3">
                 <div class="h-4 bg-gray-200 rounded-full overflow-hidden">
                   <div
                     class="h-full transition-all duration-500 ease-in-out"
-                    :class="getCapacityColorClass(podPercentage(node))"
+                    :class="[
+                      getCapacityColorClass(podPercentage(node)),
+                      node.role === 'Master' ? 'opacity-90' : 'opacity-100'
+                    ]"
                     :style="{ width: podPercentage(node) + '%' }"
                   ></div>
                 </div>
+                <div class="flex justify-between mt-1">
+                  <span class="text-xs text-gray-500">0</span>
+                  <span class="text-xs text-gray-500">{{ node.podCapacity }}</span>
+                </div>
               </div>
-              <div class="flex items-center space-x-2">
-                <span class="text-xs font-medium text-gray-700 whitespace-nowrap">
+              <div class="flex flex-col items-end">
+                <span class="text-xs font-medium whitespace-nowrap" 
+                  :class="node.role === 'Master' ? 'text-blue-700' : 'text-gray-700'">
                   {{ node.podCount }}/{{ node.podCapacity }}
                 </span>
-                <span class="text-xs font-bold px-2 py-0.5 rounded-full" :class="getUsageTextClass(podPercentage(node))">
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full mt-1" 
+                  :class="getUsageTextClass(podPercentage(node))">
                   {{ podPercentage(node) }}%
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Storage Volumes Panel -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-8">
+      <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+        <div class="flex items-center">
+          <svg class="h-5 w-5 text-amber-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v14h12V5H6zm3 8h6m-6-4h6"></path>
+          </svg>
+          <h2 class="text-xl font-semibold text-gray-800">Storage Volumes</h2>
+        </div>
+        <span class="bg-amber-100 text-amber-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+          {{ metrics.disk?.volumes?.length || 0 }} Volumes
+        </span>
+      </div>
+      
+      <div class="p-6">
+        <div v-if="loading" class="space-y-4">
+          <div class="animate-pulse h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+          <div class="animate-pulse h-4 bg-gray-200 rounded w-full"></div>
+          <div class="animate-pulse h-4 bg-gray-200 rounded w-full"></div>
+          <div class="animate-pulse h-4 bg-gray-200 rounded w-full"></div>
+        </div>
+        
+        <div v-else-if="!metrics.disk?.volumes?.length" class="py-8 text-center">
+          <div class="mx-auto w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4">
+            <svg class="h-8 w-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v14h12V5H6zm3 8h6m-6-4h6"></path>
+            </svg>
+          </div>
+          <h3 class="text-lg font-medium text-gray-900 mb-1">No Persistent Volumes Found</h3>
+          <p class="text-gray-500">There are no persistent volumes configured in the cluster.</p>
+        </div>
+        
+        <div v-else>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Capacity</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Storage Class</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Claim</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr v-for="volume in metrics.disk.volumes" :key="volume.name">
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center">
+                      <svg class="h-4 w-4 text-amber-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v14h12V5H6zm3 8h6m-6-4h6"></path>
+                      </svg>
+                      <span class="text-sm font-medium text-gray-900">{{ volume.name }}</span>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {{ volume.capacity }} GB
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <span :class="getVolumeStatusClass(volume.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
+                      {{ volume.status }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {{ volume.storageClass }}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {{ volume.claim }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -296,13 +432,23 @@
           </div>
         </div>
         
-        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col">
-          <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Cluster Uptime</h3>
-          <div class="flex items-center mt-auto">
-            <svg class="h-5 w-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="bg-blue-50 rounded-lg p-4 border border-blue-200 flex flex-col">
+          <h3 class="text-xs font-medium text-blue-600 uppercase tracking-wider mb-2">Cluster Uptime</h3>
+          <div v-if="loading" class="animate-pulse h-6 bg-blue-200 rounded w-3/4 mt-1"></div>
+          <div v-else-if="!clusterUptime" class="flex items-center mt-auto">
+            <svg class="h-5 w-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
-            <p class="text-lg font-semibold text-gray-800">{{ clusterUptime || 'Unknown' }}</p>
+            <p class="text-lg font-medium text-gray-500 italic">Not available</p>
+          </div>
+          <div v-else class="flex flex-col mt-auto">
+            <div class="flex items-center">
+              <svg class="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <p class="text-lg font-semibold text-blue-700">{{ clusterUptime }}</p>
+            </div>
+            <p class="text-xs text-blue-500 mt-1 ml-7">Since master node creation</p>
           </div>
         </div>
         
@@ -427,7 +573,12 @@ const podDistributionData = computed(() => ({
   datasets: [{
     label: 'Pods',
     data: nodes.value.map(n => n.podCount),
-    backgroundColor: nodes.value.map(n => n.status === 'Online' ? '#3B82F6' : '#9CA3AF'),
+    backgroundColor: nodes.value.map(n => {
+      if (n.status !== 'Online') return '#9CA3AF'; // Offline nodes are gray
+      return n.role === 'Master' ? '#3B82F6' : '#10B981'; // Blue for master, green for worker
+    }),
+    borderWidth: nodes.value.map(n => n.role === 'Master' ? 2 : 0),
+    borderColor: nodes.value.map(n => n.role === 'Master' ? '#2563EB' : 'transparent'),
     borderRadius: 6,
     maxBarThickness: 40
   }]
@@ -439,6 +590,14 @@ const onlineNodesCount = computed(() => {
 
 const offlineNodesCount = computed(() => {
   return nodes.value.filter(node => node.status !== 'Online').length
+})
+
+const masterNodesCount = computed(() => {
+  return nodes.value.filter(node => node.role === 'Master').length
+})
+
+const workerNodesCount = computed(() => {
+  return nodes.value.filter(node => node.role === 'Worker').length
 })
 
 const clusterHealthStatus = computed(() => {
@@ -518,6 +677,21 @@ const getUsageTextClass = (percentage) => {
   return 'bg-blue-100 text-blue-800'
 }
 
+const getVolumeStatusClass = (status) => {
+  switch (status) {
+    case 'Bound':
+      return 'bg-green-100 text-green-800'
+    case 'Available':
+      return 'bg-blue-100 text-blue-800'
+    case 'Released':
+      return 'bg-yellow-100 text-yellow-800'
+    case 'Failed':
+      return 'bg-red-100 text-red-800'
+    default:
+      return 'bg-gray-100 text-gray-800'
+  }
+}
+
 const setRefreshInterval = (interval) => {
   // Clear existing timer if any
   if (refreshTimer.value) {
@@ -572,12 +746,21 @@ function formatUptime(seconds) {
   const hours = Math.floor((seconds % 86400) / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
   
+  // Format with leading zeros for better readability
+  const formattedHours = hours.toString().padStart(2, '0')
+  const formattedMinutes = minutes.toString().padStart(2, '0')
+  
   if (days > 0) {
-    return `${days}d ${hours}h ${minutes}m`
+    if (days === 1) {
+      return `${days} day ${formattedHours}:${formattedMinutes}`
+    }
+    return `${days} days ${formattedHours}:${formattedMinutes}`
   } else if (hours > 0) {
-    return `${hours}h ${minutes}m`
+    return `${formattedHours}:${formattedMinutes}`
+  } else if (minutes > 0) {
+    return `${formattedMinutes} minutes`
   } else {
-    return `${minutes}m`
+    return `Just started`
   }
 }
 
