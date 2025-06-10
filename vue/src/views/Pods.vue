@@ -97,7 +97,7 @@ function resetForm() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+  <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4">
     <!-- Header -->
     <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6">
       <div class="flex items-center mb-4 md:mb-0">
@@ -257,87 +257,82 @@ function resetForm() {
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Namespace</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Node</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">IP</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Containers</th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Namespace</th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Node</th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">IP</th>
+              <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Containers</th>
+              <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr v-for="pod in pods" :key="`${pod.namespace}-${pod.name}`" class="hover:bg-gray-50 transition-colors">
-              <td class="px-6 py-4 whitespace-nowrap">
+              <td class="px-4 py-3 whitespace-nowrap">
                 <div class="flex items-center">
-                  <div class="flex-shrink-0 h-8 w-8 rounded-md bg-green-100 flex items-center justify-center mr-3">
-                    <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div class="flex-shrink-0 h-7 w-7 rounded-md bg-green-100 flex items-center justify-center mr-2">
+                    <svg class="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                     </svg>
                   </div>
-                  <div>
-                    <div class="text-sm font-medium text-gray-900">{{ pod.name }}</div>
-                    <div class="text-xs text-gray-500">{{ pod.ip || 'No IP assigned' }}</div>
-                  </div>
+                  <div class="text-sm font-medium text-gray-900">{{ pod.name }}</div>
                 </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
                 {{ pod.namespace }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap">
+              <td class="px-3 py-3 whitespace-nowrap">
                 <span 
-                  class="px-2.5 py-1 text-xs font-medium rounded-full"
+                  class="px-2 py-0.5 text-xs font-medium rounded-full"
                   :class="{
-                    'bg-green-100 text-green-800 border border-green-200': pod.status === 'Running',
-                    'bg-yellow-100 text-yellow-800 border border-yellow-200': pod.status === 'Pending',
-                    'bg-red-100 text-red-800 border border-red-200': pod.status === 'Failed',
-                    'bg-gray-100 text-gray-800 border border-gray-200': !['Running', 'Pending', 'Failed'].includes(pod.status)
+                    'bg-green-100 text-green-800': pod.status === 'Running',
+                    'bg-yellow-100 text-yellow-800': pod.status === 'Pending',
+                    'bg-red-100 text-red-800': pod.status === 'Failed',
+                    'bg-gray-100 text-gray-800': !['Running', 'Pending', 'Failed'].includes(pod.status)
                   }"
                 >
                   {{ pod.status }}
                 </span>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
                 {{ pod.node }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
                 {{ pod.ip || 'N/A' }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
                 <div v-if="pod.containers && pod.containers.length" class="flex flex-wrap gap-1">
                   <span 
                     v-for="container in pod.containers" 
                     :key="container"
-                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                    class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
                   >
                     {{ container }}
                   </span>
                 </div>
                 <span v-else>N/A</span>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button
-                  @click="editPod(pod)"
-                  class="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md transition-colors mr-2"
-                >
-                  <span class="flex items-center">
-                    <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <td class="px-3 py-3 whitespace-nowrap text-center text-sm font-medium">
+                <div class="flex justify-center space-x-1">
+                  <button
+                    @click="editPod(pod)"
+                    class="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-md transition-colors"
+                    title="Edit Pod"
+                  >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                     </svg>
-                    Edit
-                  </span>
-                </button>
-                <button
-                  @click="deletePod(pod.namespace, pod.name)"
-                  class="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md transition-colors"
-                >
-                  <span class="flex items-center">
-                    <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  </button>
+                  <button
+                    @click="deletePod(pod.namespace, pod.name)"
+                    class="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md transition-colors"
+                    title="Delete Pod"
+                  >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                     </svg>
-                    Delete
-                  </span>
-                </button>
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>

@@ -304,7 +304,7 @@ function resetForm() {
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Host</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -347,7 +347,7 @@ function resetForm() {
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {{ ingress.service || 'N/A' }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                 <button
                   @click="editIngress(ingress)"
                   class="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md transition-colors mr-2"

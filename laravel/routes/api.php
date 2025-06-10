@@ -12,6 +12,19 @@ Route::get('/users/me', function (Request $request) {
 })->middleware('auth:sanctum');
 
 Route::post('/auth/login', [AuthController::class, "login"]);
+Route::post('/auth/logout', [AuthController::class, "logout"])->middleware('auth:sanctum');
+Route::post('/auth/refreshtoken', [AuthController::class, "refreshToken"])->middleware('auth:sanctum');
+
+// Profile routes - protected by auth middleware
+Route::middleware('auth:sanctum')->group(function () {
+    Route::put('/users/profile', 'App\Http\Controllers\ProfileController@updateProfile');
+    Route::put('/users/password', 'App\Http\Controllers\ProfileController@updatePassword');
+    Route::post('/users/photo', 'App\Http\Controllers\ProfileController@updatePhoto');
+    
+    // User management routes (admin only)
+    Route::post('/users', 'App\Http\Controllers\UserController@store');
+});
+
 Route::get('/kube/api', [KubeController::class, "proxy"]);
 
 //METRICS/DASHBAORD

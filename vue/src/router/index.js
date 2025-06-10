@@ -12,6 +12,8 @@ import Namespaces from '@/views/Namespaces.vue'
 import Deployments from '@/views/Deployments.vue'
 import Ingresses from '@/views/Ingresses.vue'
 import Nodes from '@/views/Nodes.vue'
+import Profile from '@/views/Profile.vue'
+import CreateUser from '@/views/CreateUser.vue'
 
 
 
@@ -24,7 +26,7 @@ const router = createRouter({
       children: [
         {
           path: '', // this would be http://localhost:5173/
-          component: HomeComponent
+          redirect: '/login'
         },
         {
           path: 'dashboard', // http://localhost:5173/dashboard
@@ -63,7 +65,16 @@ const router = createRouter({
           component: Nodes,
           meta: { requiresAuth: true }
         },
-
+        {
+          path: '/profile',
+          component: Profile,
+          meta: { requiresAuth: true }
+        },
+        {
+          path: '/users/create',
+          component: CreateUser,
+          meta: { requiresAuth: true, requiresAdmin: true }
+        },
         {
           path: 'testers/laravel',
           component: LaravelTester
@@ -86,11 +97,23 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const auth = useAuthStore()
   const isLoggedIn = !!auth.user
+  const isAdmin = auth.userType === 'A'
+
+  // For debugging
+  console.log('Navigation guard - route:', to.path, 'isLoggedIn:', isLoggedIn, 'isAdmin:', isAdmin)
 
   if (to.meta.requiresAuth && !isLoggedIn) {
-    next('/login')
+    console.log('Protected route, redirecting to login')
+    next({ path: '/login', replace: true })
+  } else if (to.meta.requiresAdmin && !isAdmin) {
+    console.log('Admin-only route accessed by non-admin, redirecting to dashboard')
+    next({ path: '/dashboard', replace: true })
   } else if (to.path === '/login' && isLoggedIn) {
-    next('/dashboard')
+    console.log('Already logged in, redirecting to dashboard')
+    next({ path: '/dashboard', replace: true })
+  } else if (to.path === '/' && isLoggedIn) {
+    console.log('Root path with login, redirecting to dashboard')
+    next({ path: '/dashboard', replace: true })
   } else {
     next()
   }

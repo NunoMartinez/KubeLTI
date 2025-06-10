@@ -29,6 +29,11 @@ export const useAuthStore = defineStore('auth', () => {
   const userType = computed(() => {
     return user.value ? user.value.type : ''
   })
+  
+  const userTypeFormatted = computed(() => {
+    if (!user.value) return ''
+    return user.value.type === 'A' ? 'Admin' : 'User'
+  })
 
   const userGender = computed(() => {
     return user.value ? user.value.gender : ''
@@ -76,16 +81,32 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await axios.post('auth/logout')
       clearUser()
+      token.value = ''
+      localStorage.removeItem('authToken')
+      // Explicitly clear the user state
+      user.value = null
+      // Clear token from axios headers
+      axios.defaults.headers.common.Authorization = ''
       return true
     } catch (e) {
+      // Even if the API call fails, we want to clear local state
       clearUser()
-      storeError.setErrorMessages(
-        e.response.data.message,
-        [],
-        e.response.status,
-        'Authentication Error!'
-      )
-      return false
+      token.value = ''
+      localStorage.removeItem('authToken')
+      user.value = null
+      axios.defaults.headers.common.Authorization = ''
+      
+      // Only set error message if there's a response
+      if (e.response) {
+        storeError.setErrorMessages(
+          e.response.data.message,
+          [],
+          e.response.status,
+          'Authentication Error!'
+        )
+      }
+      // Return true anyway to allow redirect
+      return true
     }
   }
 
@@ -131,6 +152,7 @@ export const useAuthStore = defineStore('auth', () => {
     userFirstLastName,
     userEmail,
     userType,
+    userTypeFormatted,
     userGender,
     userPhotoUrl,
     login,

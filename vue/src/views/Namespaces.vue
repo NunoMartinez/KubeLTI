@@ -159,7 +159,7 @@ onMounted(fetchNamespaces)
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created At</th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -191,7 +191,7 @@ onMounted(fetchNamespaces)
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {{ new Date(ns.created_at).toLocaleString() }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                 <button
                   @click="editNamespace(ns)"
                   class="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md transition-colors mr-2"

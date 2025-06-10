@@ -270,7 +270,7 @@ onMounted(() => {
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Replicas</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Available</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -312,7 +312,7 @@ onMounted(() => {
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {{ new Date(dep.created_at).toLocaleString() }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                 <button
                   @click="editDeployment(dep)"
                   class="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md transition-colors mr-2"

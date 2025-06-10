@@ -124,6 +124,81 @@
       </div>
     </div>
     
+    <!-- Resource Distribution Overview -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center">
+          <svg class="h-5 w-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path>
+          </svg>
+          <h2 class="text-xl font-semibold text-gray-800">Resources Overview</h2>
+        </div>
+        <div class="flex items-center">
+          <span class="bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+            {{ Object.values(resources).reduce((a, b) => a + b, 0) }} Total Resources
+          </span>
+        </div>
+      </div>
+      
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="flex flex-col">
+          <h3 class="text-sm font-medium text-gray-500 mb-3">Resource Distribution</h3>
+          <div class="bg-gray-50 p-4 rounded-lg flex-grow flex items-center justify-center">
+            <div v-if="loading" class="py-8 animate-pulse">
+              <div class="h-40 w-40 bg-gray-200 rounded-full mx-auto"></div>
+            </div>
+            <div v-else-if="Object.values(resources).every(count => count === 0)" class="py-8 text-center">
+              <div class="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <svg class="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              </div>
+              <p class="text-gray-500">No resource data available</p>
+            </div>
+            <div v-else class="h-56 w-full">
+              <PieChart :data="resourcesChartData" :options="{
+                plugins: {
+                  tooltip: {
+                    callbacks: {
+                      label: (context) => `${context.label}: ${context.raw} (${Math.round(context.raw / Object.values(resources).reduce((a, b) => a + b, 0) * 100)}%)`
+                    }
+                  }
+                }
+              }" />
+            </div>
+          </div>
+        </div>
+        
+        <div class="flex flex-col">
+          <h3 class="text-sm font-medium text-gray-500 mb-3">Resource Counts</h3>
+          <div class="bg-gray-50 p-4 rounded-lg flex-grow">
+            <div v-if="loading" class="animate-pulse space-y-3">
+              <div class="h-8 bg-gray-200 rounded"></div>
+              <div class="h-8 bg-gray-200 rounded"></div>
+              <div class="h-8 bg-gray-200 rounded"></div>
+            </div>
+            <div v-else class="space-y-3 h-full flex flex-col justify-center">
+              <div v-for="(count, key, index) in resources" :key="key" 
+                class="flex items-center justify-between p-3 rounded-lg" 
+                :class="`bg-opacity-10 border border-opacity-20`"
+                :style="{
+                  backgroundColor: resourcesChartData.datasets[0].backgroundColor[index] + '15',
+                  borderColor: resourcesChartData.datasets[0].backgroundColor[index] + '30'
+                }"
+              >
+                <div class="flex items-center">
+                  <div class="w-3 h-3 rounded-full mr-2" :style="{ backgroundColor: resourcesChartData.datasets[0].backgroundColor[index] }"></div>
+                  <span class="font-medium">{{ key.charAt(0).toUpperCase() + key.slice(1) }}</span>
+                </div>
+                <span class="text-lg font-semibold">{{ count }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <!-- Nodes Status Panel -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-8">
       <div class="p-6 border-b border-gray-200 flex flex-col md:flex-row md:justify-between md:items-center">
@@ -484,6 +559,7 @@ import axios from 'axios'
 import MetricCard from '@/components/MetricCard.vue'
 import NodesStatus from '@/components/NodesStatus.vue'
 import BarChart from '@/components/BarChart.vue'
+import PieChart from '@/components/PieChart.vue'
 
 // Data state
 const metrics = ref({
@@ -497,6 +573,14 @@ const error = ref(null)
 const lastUpdated = ref(null)
 const clusterVersion = ref(null)
 const clusterUptime = ref(null)
+const resources = ref({
+  pods: 0,
+  services: 0,
+  deployments: 0,
+  nodes: 0,
+  namespaces: 0,
+  ingresses: 0
+})
 
 // Auto-refresh state
 const autoRefreshInterval = ref(0) // 0 means disabled
@@ -599,6 +683,31 @@ const masterNodesCount = computed(() => {
 const workerNodesCount = computed(() => {
   return nodes.value.filter(node => node.role === 'Worker').length
 })
+
+const resourcesChartData = computed(() => ({
+  labels: ['Pods', 'Services', 'Deployments', 'Nodes', 'Namespaces', 'Ingresses'],
+  datasets: [{
+    label: 'Resource Count',
+    data: [
+      resources.value.pods,
+      resources.value.services,
+      resources.value.deployments,
+      resources.value.nodes,
+      resources.value.namespaces,
+      resources.value.ingresses
+    ],
+    backgroundColor: [
+      '#10B981', // Green for Pods
+      '#3B82F6', // Blue for Services
+      '#6366F1', // Indigo for Deployments
+      '#F59E0B', // Amber for Nodes
+      '#EC4899', // Pink for Namespaces
+      '#8B5CF6'  // Purple for Ingresses
+    ],
+    borderColor: '#fff',
+    borderWidth: 2
+  }]
+}))
 
 const clusterHealthStatus = computed(() => {
   // Calculate overall health based on metrics and node status
@@ -715,14 +824,29 @@ async function fetchData() {
     loading.value = true
     error.value = null
     
-    const [metricsRes, nodesRes, clusterRes] = await Promise.all([
+    const [metricsRes, nodesRes, clusterRes, podsRes, servicesRes, deploymentsRes, namespacesRes, ingressesRes] = await Promise.all([
       axios.get('/kube/metrics'),
       axios.get('/kube/nodes'),
-      axios.get('/kube/api')
+      axios.get('/kube/api'),
+      axios.get('/kube/pods'),
+      axios.get('/kube/services'),
+      axios.get('/kube/deployments'),
+      axios.get('/kube/namespaces'),
+      axios.get('/kube/ingresses').catch(() => ({ data: [] })) // Handle case if ingresses endpoint is not available
     ])
     
     metrics.value = metricsRes.data
     nodes.value = nodesRes.data
+    
+    // Update resource counts
+    resources.value = {
+      pods: podsRes.data.length || 0,
+      services: servicesRes.data.length || 0,
+      deployments: deploymentsRes.data.length || 0,
+      nodes: nodesRes.data.length || 0,
+      namespaces: namespacesRes.data.length || 0,
+      ingresses: ingressesRes.data?.length || 0
+    }
     
     // Extract cluster info
     if (clusterRes.data) {
