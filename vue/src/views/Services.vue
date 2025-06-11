@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import EditServiceModal from '@/components/EditServiceModal.vue'
+import RefreshControl from '@/components/RefreshControl.vue'
 
 const services = ref([])
 const namespaces = ref([])
@@ -111,7 +112,9 @@ function resetForm() {
         <h1 class="text-2xl font-bold text-gray-800">Kubernetes Services</h1>
       </div>
       
-      <div class="flex items-center">
+      <div class="flex items-center space-x-4">
+        <RefreshControl @refresh="fetchServices" :interval="30" />
+        
         <span class="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
           {{ services.length }} Total Services
         </span>

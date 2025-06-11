@@ -8,10 +8,16 @@
     </div>
     <div class="flex items-end justify-between">
       <div>
-        <p class="text-2xl font-bold">
+        <p class="text-2xl font-bold" v-if="title === 'CPU Usage'">
+          {{ percentage }}% <span class="text-sm font-normal text-gray-500">usage</span>
+        </p>
+        <p class="text-2xl font-bold" v-else>
           {{ formattedValue }} <span class="text-sm font-normal text-gray-500">{{ unit }}</span>
         </p>
-        <p class="text-sm text-gray-500">
+        <p class="text-sm text-gray-500" v-if="title === 'CPU Usage'">
+          {{ formattedValue }} of {{ formattedMax }} {{ unit }}
+        </p>
+        <p class="text-sm text-gray-500" v-else>
           {{ percentage }}% of {{ formattedMax }} {{ unit }}
         </p>
       </div>
@@ -45,11 +51,13 @@ const props = defineProps({
 
 const formattedValue = computed(() => {
   if (props.unit === 'GB') return parseFloat(props.value).toFixed(2)
+  if (props.unit === 'cores') return parseFloat(props.value).toFixed(1)
   return props.value
 })
 
 const formattedMax = computed(() => {
   if (props.unit === 'GB') return parseFloat(props.max).toFixed(2)
+  if (props.unit === 'cores') return parseFloat(props.max).toFixed(1)
   return props.max
 })
 

@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import EditIngressModal from '@/components/EditIngressModal.vue'
+import RefreshControl from '@/components/RefreshControl.vue'
 
 const ingresses = ref([])
 const services = ref([])
@@ -124,7 +125,9 @@ function resetForm() {
         <h1 class="text-2xl font-bold text-gray-800">Kubernetes Ingresses</h1>
       </div>
       
-      <div class="flex items-center">
+      <div class="flex items-center space-x-4">
+        <RefreshControl @refresh="fetchIngresses" :interval="30" />
+        
         <span class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
           {{ ingresses.length }} Total Ingresses
         </span>

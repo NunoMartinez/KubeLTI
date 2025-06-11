@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import RefreshControl from '@/components/RefreshControl.vue'
 import EditNamespacesModal from '@/components/EditNamespacesModal.vue'
 
 const namespaces = ref([])
@@ -75,7 +76,9 @@ onMounted(fetchNamespaces)
         <h1 class="text-2xl font-bold text-gray-800">Namespaces</h1>
       </div>
       
-      <div class="flex items-center">
+      <div class="flex items-center space-x-4">
+        <RefreshControl @refresh="fetchNamespaces" :interval="30" />
+        
         <span class="bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
           {{ namespaces.length }} Total
         </span>

@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import EditPodModal from '@/components/EditPodModal.vue'
+import RefreshControl from '@/components/RefreshControl.vue'
 
 const pods = ref([])
 const namespaces = ref([])
@@ -109,7 +110,9 @@ function resetForm() {
         <h1 class="text-2xl font-bold text-gray-800">Kubernetes Pods</h1>
       </div>
       
-      <div class="flex items-center">
+      <div class="flex items-center space-x-4">
+        <RefreshControl @refresh="fetchPods" :interval="30" />
+        
         <span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
           {{ pods.length }} Total Pods
         </span>

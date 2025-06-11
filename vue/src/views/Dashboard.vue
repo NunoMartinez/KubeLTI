@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-gradient-to-br from-gray-50 to-gray-100 p-6 h-full w-full">
+  <div class="bg-gradient-to-br from-gray-50 to-gray-100 p-6 h-full">
     <!-- Dashboard Header with Status -->
     <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-8">
       <div class="flex flex-col md:flex-row md:items-center mb-4 md:mb-0">
@@ -36,50 +36,12 @@
       </div>
       
       <div class="flex items-center space-x-3">
-        <div class="flex items-center bg-white rounded-lg shadow-sm p-1">
-          <span class="text-sm text-gray-500 px-2">Refresh</span>
-          <div class="flex border-l border-gray-200">
-            <button 
-              @click="setRefreshInterval(0)"
-              :class="[
-                'px-3 py-1 text-sm font-medium transition-colors',
-                autoRefreshInterval === 0 ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-              ]"
-            >
-              Off
-            </button>
-            <button 
-              @click="setRefreshInterval(30000)"
-              :class="[
-                'px-3 py-1 text-sm font-medium transition-colors',
-                autoRefreshInterval === 30000 ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-              ]"
-            >
-              30s
-            </button>
-            <button 
-              @click="setRefreshInterval(60000)"
-              :class="[
-                'px-3 py-1 text-sm font-medium transition-colors',
-                autoRefreshInterval === 60000 ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-              ]"
-            >
-              1m
-            </button>
-          </div>
-        </div>
-        
-        <button 
-          @click="refreshData"
-          class="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm transition-colors"
-          :disabled="loading"
-          :class="{ 'opacity-70 cursor-not-allowed': loading }"
-        >
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-          </svg>
-          Refresh Now
-        </button>
+        <RefreshControl 
+          @refresh="handleRefresh" 
+          :interval="30" 
+          :autoStart="false" 
+          :showCountdown="true"
+        />
       </div>
     </div>
 
@@ -497,55 +459,147 @@
       </div>
       
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col">
-          <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Kubernetes Version</h3>
-          <div class="flex items-center mt-auto">
-            <svg class="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-            </svg>
-            <p class="text-lg font-semibold text-gray-800">{{ clusterVersion || 'Unknown' }}</p>
+        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col h-full">
+          <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Kubernetes Version</h3>
+          <div class="flex items-center flex-grow">
+            <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3 flex-shrink-0">
+              <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="text-sm text-gray-500">Version</div>
+              <div class="text-lg font-semibold text-gray-800">
+                {{ clusterVersion || 'Unknown' }}
+              </div>
+            </div>
           </div>
         </div>
         
-        <div class="bg-blue-50 rounded-lg p-4 border border-blue-200 flex flex-col">
-          <h3 class="text-xs font-medium text-blue-600 uppercase tracking-wider mb-2">Cluster Uptime</h3>
-          <div v-if="loading" class="animate-pulse h-6 bg-blue-200 rounded w-3/4 mt-1"></div>
-          <div v-else-if="!clusterUptime" class="flex items-center mt-auto">
-            <svg class="h-5 w-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <p class="text-lg font-medium text-gray-500 italic">Not available</p>
+        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col h-full">
+          <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Cluster Uptime</h3>
+          
+          <div v-if="loading" class="animate-pulse flex items-center flex-grow">
+            <div class="w-8 h-8 rounded-full bg-gray-200 mr-3 flex-shrink-0"></div>
+            <div class="space-y-2 w-full">
+              <div class="h-4 bg-gray-200 rounded w-1/3"></div>
+              <div class="h-6 bg-gray-200 rounded w-3/4"></div>
+            </div>
           </div>
-          <div v-else class="flex flex-col mt-auto">
-            <div class="flex items-center">
-              <svg class="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          
+          <div v-else-if="!clusterUptime" class="flex items-center flex-grow">
+            <div class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3 flex-shrink-0">
+              <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
               </svg>
-              <p class="text-lg font-semibold text-blue-700">{{ clusterUptime }}</p>
             </div>
-            <p class="text-xs text-blue-500 mt-1 ml-7">Since master node creation</p>
+            <div>
+              <div class="text-sm text-gray-500">Uptime</div>
+              <div class="text-lg font-medium text-gray-500 italic">
+                Not available
+              </div>
+            </div>
+          </div>
+          
+          <div v-else class="flex items-center flex-grow">
+            <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center mr-3 flex-shrink-0">
+              <svg class="h-4 w-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="text-sm text-gray-500">Running for</div>
+              <div class="text-lg font-semibold text-gray-800">
+                {{ clusterUptime }}
+              </div>
+              <div class="text-xs text-gray-500">Since master node creation</div>
+            </div>
           </div>
         </div>
         
-        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col">
-          <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Total Resources</h3>
-          <div class="flex items-center mt-auto">
-            <svg class="h-5 w-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
-            </svg>
-            <p class="text-lg font-semibold text-gray-800">
-              {{ metrics.cpu.total }} cores, {{ metrics.memory.total }} GB
-            </p>
+        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col h-full">
+          <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Total Resources</h3>
+          
+          <div class="space-y-2 flex-grow flex flex-col justify-center">
+            <!-- CPU Resources -->
+            <div class="flex items-center">
+              <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3 flex-shrink-0">
+                <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="text-sm text-gray-500">CPU</div>
+                <div class="text-lg font-semibold text-gray-800">
+                  {{ parseFloat(metrics.cpu.total).toFixed(1) }} cores
+                </div>
+              </div>
+            </div>
+            
+            <!-- Memory Resources -->
+            <div class="flex items-center">
+              <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3 flex-shrink-0">
+                <svg class="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="text-sm text-gray-500">Memory</div>
+                <div class="text-lg font-semibold text-gray-800">
+                  {{ parseFloat(metrics.memory.total).toFixed(2) }} GB
+                </div>
+              </div>
+            </div>
+            
+            <!-- Pod Capacity -->
+            <div class="flex items-center">
+              <div class="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-3 flex-shrink-0">
+                <svg class="h-4 w-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="text-sm text-gray-500">Pod Capacity</div>
+                <div class="text-lg font-semibold text-gray-800">
+                  {{ metrics.pods.total }} pods
+                </div>
+              </div>
+            </div>
+            
+            <!-- Disk Capacity -->
+            <div class="flex items-center" v-if="metrics.disk && metrics.disk.total">
+              <div class="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center mr-3 flex-shrink-0">
+                <svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v14h12V5H6zm3 8h6m-6-4h6"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="text-sm text-gray-500">Disk Storage</div>
+                <div class="text-lg font-semibold text-gray-800">
+                  {{ parseFloat(metrics.disk.total).toFixed(2) }} GB
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         
-        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col">
-          <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Last Refreshed</h3>
-          <div class="flex items-center mt-auto">
-            <svg class="h-5 w-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <p class="text-lg font-semibold text-gray-800">{{ lastUpdatedFull || 'Never' }}</p>
+        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col h-full">
+          <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Last Refreshed</h3>
+          <div class="flex items-center flex-grow">
+            <div class="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center mr-3 flex-shrink-0">
+              <svg class="h-4 w-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="text-sm text-gray-500">Updated</div>
+              <div class="text-lg font-semibold text-gray-800">
+                {{ lastUpdatedFull || 'Never' }}
+              </div>
+              <div v-if="lastUpdated" class="text-xs text-gray-500">
+                {{ lastUpdatedText }}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -560,6 +614,7 @@ import MetricCard from '@/components/MetricCard.vue'
 import NodesStatus from '@/components/NodesStatus.vue'
 import BarChart from '@/components/BarChart.vue'
 import PieChart from '@/components/PieChart.vue'
+import RefreshControl from '@/components/RefreshControl.vue'
 
 // Data state
 const metrics = ref({
@@ -890,6 +945,19 @@ function formatUptime(seconds) {
 
 function refreshData() {
   fetchData()
+}
+
+// Handle refresh from RefreshControl component
+const handleRefresh = async () => {
+  // Clear existing timer if any
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value)
+    refreshTimer.value = null
+    autoRefreshInterval.value = 0
+  }
+  
+  // Refresh data
+  refreshData()
 }
 
 // Lifecycle hooks

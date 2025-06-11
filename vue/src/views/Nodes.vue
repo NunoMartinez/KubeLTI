@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
+import RefreshControl from '@/components/RefreshControl.vue'
 
 const nodes = ref([])
 const loading = ref(true)
@@ -44,8 +45,10 @@ async function fetchNodes() {
         <h1 class="text-2xl font-bold text-gray-800">Kubernetes Nodes</h1>
       </div>
       
-      <div class="flex flex-wrap gap-3">
-        <div class="flex items-center">
+      <div class="flex flex-wrap items-center gap-3">
+        <RefreshControl @refresh="fetchNodes" :interval="30" />
+        
+        <div class="flex items-center ml-2">
           <div class="w-3 h-3 rounded-full bg-green-500 mr-1"></div>
           <span class="text-sm text-gray-600">{{ onlineNodesCount }} Online</span>
         </div>

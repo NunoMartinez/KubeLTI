@@ -2,6 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
 import EditDeploymentModal from '@/components/EditDeploymentModal.vue'
+import RefreshControl from '@/components/RefreshControl.vue'
 
 const deployments = ref([])
 const namespaces = ref([])
@@ -121,7 +122,9 @@ onMounted(() => {
         <h1 class="text-2xl font-bold text-gray-800">Kubernetes Deployments</h1>
       </div>
       
-      <div class="flex items-center">
+      <div class="flex items-center space-x-4">
+        <RefreshControl @refresh="fetchDeployments" :interval="30" />
+        
         <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
           {{ deployments.length }} Total Deployments
         </span>

@@ -1,11 +1,15 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen bg-transparent flex justify-center" style="background-image: url('/bg.jpg'); background-size: cover; background-position: center;">
     <!-- Overlay when sidebar is open -->
-    <div 
-      v-if="isSidebarOpen" 
-      @click="closeSidebar"
-      class="fixed inset-0 bg-gray-600 bg-opacity-50 z-20 transition-opacity duration-300"
-    ></div>
+    <transition name="fade">
+      <div 
+        v-if="isSidebarOpen" 
+        @click="closeSidebar"
+        class="fixed inset-0 bg-gray-800 bg-opacity-60 z-30 backdrop-blur-sm"
+        aria-hidden="true"
+        role="presentation"
+      ></div>
+    </transition>
     
     <!-- Sidebar - always hidden by default, shown only when toggled -->
     <Sidebar 
@@ -13,10 +17,10 @@
       @close="closeSidebar"
     />
     
-    <!-- Main Content - always takes full width -->
-    <div class="min-h-screen flex flex-col">
+    <!-- Main Content - fixed width with margins on sides -->
+    <div class="min-h-screen flex flex-col w-full max-w-7xl relative">
       <!-- Top navbar with hamburger and user dropdown -->
-      <div class="bg-white border-b border-gray-200 flex items-center justify-between px-4 py-3 shadow-sm">
+      <div class="bg-white border-b border-gray-200 flex items-center justify-between px-4 py-3 shadow-sm relative z-30">
         <div class="flex items-center">
           <button 
             @click="toggleSidebar" 
@@ -27,16 +31,19 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <h1 class="ml-4 text-lg font-semibold text-gray-800">Kubernetes LTI</h1>
+          <router-link to="/dashboard" class="ml-4 text-lg font-semibold text-gray-800 hover:text-blue-600 transition-colors">
+            Kubernetes LTI
+          </router-link>
         </div>
         
-        <!-- User profile dropdown -->
-        <div class="relative">
+        <!-- User profile dropdown - Completely rebuilt -->
+        <div class="relative inline-block text-left">
           <button 
             @click="toggleUserDropdown" 
             class="flex items-center space-x-2 text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-full p-1"
-            aria-expanded="false"
-            :aria-label="isUserDropdownOpen ? 'Close user menu' : 'Open user menu'"
+            type="button"
+            aria-haspopup="true"
+            :aria-expanded="isUserDropdownOpen"
           >
             <img 
               :src="auth.userPhotoUrl" 
@@ -56,42 +63,39 @@
             </svg>
           </button>
           
-          <!-- Dropdown menu -->
           <div 
-            v-if="isUserDropdownOpen" 
-            class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50"
-            role="menu"
+            v-show="isUserDropdownOpen" 
+            class="absolute right-0 mt-2 w-48 origin-top-right bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
+            @click.stop
           >
             <div class="px-4 py-2 border-b border-gray-100">
               <p class="text-sm font-medium text-gray-900">{{ auth.userName }}</p>
               <p class="text-xs text-gray-500 truncate">{{ auth.userEmail }}</p>
             </div>
-            <router-link 
-              to="/profile" 
-              class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
-              role="menuitem"
-              @click="isUserDropdownOpen = false"
-            >
-              Your Profile
-            </router-link>
-            <!-- Admin only - Create User link -->
-            <router-link 
-              v-if="auth.userType === 'A'"
-              to="/users/create" 
-              class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
-              role="menuitem"
-              @click="isUserDropdownOpen = false"
-            >
-              Create User
-            </router-link>
-            <a 
-              href="#" 
-              class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
-              role="menuitem"
-              @click.prevent="handleLogout"
-            >
-              Sign out
-            </a>
+            <div class="py-1">
+              <router-link 
+                to="/profile" 
+                class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
+                @click="isUserDropdownOpen = false"
+              >
+                Your Profile
+              </router-link>
+              <router-link 
+                v-if="auth.userType === 'A'"
+                to="/users/create" 
+                class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                @click="isUserDropdownOpen = false"
+              >
+                Create User
+              </router-link>
+              <button
+                type="button"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                @click="handleLogout"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -102,12 +106,7 @@
       </div>
     </div>
     
-    <!-- Overlay to close dropdown when clicking outside -->
-    <div 
-      v-if="isUserDropdownOpen" 
-      @click="isUserDropdownOpen = false"
-      class="fixed inset-0 z-40"
-    ></div>
+
   </div>
 </template>
 
@@ -117,6 +116,21 @@ import { provide, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import axios from 'axios'
+
+// Add global CSS for transitions
+const style = document.createElement('style')
+style.textContent = `
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+`
+document.head.appendChild(style)
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -139,6 +153,15 @@ const closeSidebar = () => {
 // Toggle user dropdown
 const toggleUserDropdown = () => {
   isUserDropdownOpen.value = !isUserDropdownOpen.value
+}
+
+// Close dropdown when clicking outside
+const handleClickOutside = (event) => {
+  const dropdown = document.querySelector('.relative.inline-block.text-left')
+  // If clicking outside the dropdown and dropdown is open, close it
+  if (dropdown && !dropdown.contains(event.target) && isUserDropdownOpen.value) {
+    isUserDropdownOpen.value = false
+  }
 }
 
 // Handle logout
@@ -173,10 +196,12 @@ const handleEscapeKey = (event) => {
 // Add and remove event listeners
 onMounted(() => {
   document.addEventListener('keydown', handleEscapeKey)
+  document.addEventListener('click', handleClickOutside)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleEscapeKey)
+  document.removeEventListener('click', handleClickOutside)
 })
 
 // Cluster info

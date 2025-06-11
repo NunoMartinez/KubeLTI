@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { defineStore } from 'pinia'
 import axios from 'axios'
 import { useErrorStore } from '@/stores/error'
@@ -8,8 +8,9 @@ import avatarNoneAssetURL from '@/assets/avatar-none.png'
 export const useAuthStore = defineStore('auth', () => {
   const storeError = useErrorStore()
 
-  const user = ref(null)
-  const token = ref('')
+  // Initialize with values from localStorage if available
+  const user = ref(JSON.parse(localStorage.getItem('authUser')) || null)
+  const token = ref(localStorage.getItem('authToken') || '')
 
   const userName = computed(() => {
     return user.value ? user.value.name : ''
@@ -51,6 +52,8 @@ export const useAuthStore = defineStore('auth', () => {
   const clearUser = () => {
     resetIntervalToRefreshToken()
     user.value = null
+    localStorage.removeItem('authUser')
+    localStorage.removeItem('authToken')
     axios.defaults.headers.common.Authorization = ''
   }
 
@@ -59,9 +62,17 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const responseLogin = await axios.post('auth/login', credentials)
       token.value = responseLogin.data.token
+      
+      // Save token to localStorage
+      localStorage.setItem('authToken', token.value)
+      
       axios.defaults.headers.common.Authorization = 'Bearer ' + token.value
       const responseUser = await axios.get('users/me')
       user.value = responseUser.data
+      
+      // Save user data to localStorage
+      localStorage.setItem('authUser', JSON.stringify(user.value))
+      
       repeatRefreshToken()
       return user.value
     } catch (e) {
@@ -144,6 +155,14 @@ export const useAuthStore = defineStore('auth', () => {
       1000 * 60 * 110
     )
     return intervalToRefreshToken
+  }
+
+  // Initialize auth header if token exists
+  if (token.value) {
+    axios.defaults.headers.common.Authorization = 'Bearer ' + token.value
+    
+    // Start the token refresh interval
+    repeatRefreshToken()
   }
 
   return {

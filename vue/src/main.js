@@ -6,6 +6,7 @@ import Toast, { POSITION } from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 
 import '@/assets/base.css'
+import '@/assets/global.css'
 
 import App from './App.vue'
 import router from './router'
