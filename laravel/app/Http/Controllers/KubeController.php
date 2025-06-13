@@ -510,7 +510,7 @@ private function cleanPodManifest($manifest)
 
 
 
-            //  Services \\
+            //  SERVICES \\
 
 
     public function services()
@@ -917,8 +917,7 @@ public function updateService(Request $request, $namespace, $name)
 }
 
 /**
- * Helper function to properly format container resources
- * This ensures resources are properly formatted for Kubernetes API
+
  */
 private function formatContainerResources(&$container)
 {
